@@ -2,10 +2,11 @@
 
 Ogni mattina GitHub Actions (gratis per i repository pubblici):
 
-1. **05:15** – legge gli eventi "accadde oggi" di Wikipedia e fa scegliere a
-   un'AI gratuita (Google Gemini) le 10 **curiosità storiche** più adatte, poi
-   scrive testi, titoli, didascalie e hashtag;
-2. crea le 10 clip verticali (voce Edge TTS, sottotitoli dinamici, musica);
+1. **05:15** – sceglie 10 oggetti di tutti i giorni mai trattati prima, legge
+   come vengono prodotti su Wikipedia e fa scrivere a un'AI gratuita (Google
+   Gemini) clip **"Come è fatto"**: dalla materia prima al prodotto finito;
+2. crea le 10 clip verticali: voce narrante Gemini (umana) con riserva Edge,
+   sottotitoli parola per parola, video di fabbrica da Pixabay, musica;
 3. le mette in una **Release** chiamata `clips-AAAA-MM-GG` (le trovi nella
    pagina *Releases* del repository, pronte da scaricare);
 4. dalle **07:30 alle 22:30** pubblica una clip per volta negli orari migliori:
@@ -18,7 +19,7 @@ Tutto funziona senza carte di credito. Ogni canale si accende aggiungendo i suoi
 
 | Secret | A cosa serve | Come ottenerlo |
 |---|---|---|
-| `GEMINI_API_KEY` | **Necessaria per 10 clip AI al giorno.** Senza, escono solo 2 clip "accadde oggi" con gli eventi di Wikipedia | aistudio.google.com/apikey → *Create API key* (piano gratuito, nessuna carta). Il nome del secret deve essere esattamente `GEMINI_API_KEY`, tra i *Repository secrets* |
+| `GEMINI_API_KEY` | Testi AI e **voce narrante umana**. Senza, escono clip più semplici lette dai riassunti di Wikipedia con voce Edge | aistudio.google.com/apikey → *Create API key* (piano gratuito, nessuna carta). Il nome del secret deve essere esattamente `GEMINI_API_KEY`, tra i *Repository secrets* |
 | `PIXABAY_API_KEY` | Sfondi video veri invece dei gradienti | Registrati su pixabay.com (gratis) → apri pixabay.com/api/docs/ da loggato → la chiave è nel paragrafo *Parameters*, voce `key` |
 | `PEXELS_API_KEY` (alternativa) | Come sopra, se Pexels riapre le nuove chiavi | pexels.com/api |
 | `TELEGRAM_BOT_TOKEN` + `TELEGRAM_CHAT_ID` | Ti arriva ogni clip sul telefono, all'orario giusto, con didascalia pronta da incollare su TikTok | Su Telegram scrivi a **@BotFather** → `/newbot` → copia il token. Poi scrivi un messaggio al tuo bot e apri `https://api.telegram.org/bot<TOKEN>/getUpdates`: il numero in `"chat":{"id":…}` è il CHAT_ID |
@@ -58,8 +59,9 @@ Opzioni gratuite:
 - **Prova in locale**: `python autopilot/render.py piano.json out.mp4`.
 
 ## Regole editoriali dell'AI
-Tema unico: curiosità sulla storia. L'AI usa solo i fatti degli estratti di
-Wikipedia o fatti storici certi, tratta guerre e tragedie con rispetto ed evita
-politica di parte e contenuti macabri. Le regole sono in `writer.py` (`RULES`).
+Formato unico "Come è fatto": come si fabbrica un oggetto, passo per passo.
+L'AI usa solo i fatti degli estratti di Wikipedia o conoscenze tecniche certe,
+non inventa numeri né nomi di aziende e non cita programmi TV o marchi di terzi.
+La lista degli oggetti è in `writer.py` (`OBJECTS`): aggiungine quanti vuoi. Le regole sono in `writer.py` (`RULES`).
 Controlla comunque le clip nella Release del giorno: puoi cancellarne una
 prima dell'orario e verrà saltata.

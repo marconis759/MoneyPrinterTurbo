@@ -41,7 +41,7 @@ def main() -> None:
     else:
         from autopilot.writer import generate_plans
 
-        avoid = [h["title"] for h in history[-120:]]
+        avoid = [h.get("oggetto") or h["title"] for h in history[-300:]]
         plan_paths = generate_plans(args.count, avoid, out / "plans", args.date)
     if args.only:
         plan_paths = plan_paths[: args.only]
@@ -57,6 +57,7 @@ def main() -> None:
             print(f"  render fallito: {exc}")
             continue
         clips.append({"file": name, "title": plan["title"], "caption": plan["caption"],
+                      "oggetto": plan.get("oggetto", ""),
                       "hashtags": plan["hashtags"], "sources": plan.get("sources", []), **info})
     if not clips:
         raise SystemExit("nessuna clip prodotta")
@@ -66,7 +67,7 @@ def main() -> None:
     manifest = {"date": args.date, "clips": clips}
     (out / "manifest.json").write_text(json.dumps(manifest, ensure_ascii=False, indent=2), encoding="utf-8")
 
-    history += [{"date": args.date, "title": c["title"]} for c in clips]
+    history += [{"date": args.date, "title": c["title"], "oggetto": c["oggetto"]} for c in clips]
     HISTORY.write_text(json.dumps(history[-300:], ensure_ascii=False, indent=1), encoding="utf-8")
     print(f"fatto: {len(clips)} clip in {out}")
 
