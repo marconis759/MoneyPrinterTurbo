@@ -15,6 +15,7 @@ import random
 import re
 import shutil
 import subprocess
+import sys
 import tempfile
 from dataclasses import dataclass
 from pathlib import Path
@@ -22,12 +23,17 @@ from pathlib import Path
 import requests
 from PIL import Image, ImageDraw, ImageFont
 
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+from autopilot.voice import GEMINI_VOICES, align, gemini_tts, transcribe_words
+
 ROOT = Path(__file__).resolve().parent.parent
 FONT = ROOT / "resource" / "fonts" / "BeVietnamPro-Bold.ttf"
 SONGS = ROOT / "resource" / "songs"
 W, H, FPS = 1080, 1920, 30
 
-VOICES = ["it-IT-DiegoNeural", "it-IT-ElsaNeural", "it-IT-IsabellaNeural", "it-IT-GiuseppeMultilingualNeural"]
+# Voci Edge di riserva: le "Multilingual" sono le più naturali.
+VOICES = ["it-IT-GiuseppeMultilingualNeural", "it-IT-GiuseppeMultilingualNeural", "it-IT-ElsaNeural",
+          "it-IT-IsabellaNeural"]
 
 PALETTES = {
     "violet": ("0x12062a", "0x5a0f7a", "0xc04bff", "#FFE45C"),
@@ -290,16 +296,46 @@ def render_plan(plan: dict, out_file: Path, work: Path | None = None, seed: int 
     cache = work / "cache"
     cache.mkdir(exist_ok=True)
 
+    scenes = plan["scenes"]
+    voice_wav = work / "voice.wav"
     all_words: list[Word] = []
-    segments, audios, t0, used, engines, backgrounds = [], [], 0.0, set(), set(), 0
-    for i, scene in enumerate(plan["scenes"]):
-        audio = work / f"s{i:02}.mp3"
-        words, engine = synthesize(scene["text"], voice, audio)
-        engines.add(engine)
-        wav = work / f"s{i:02}.wav"
-        run(["ffmpeg", "-y", "-i", str(audio), "-af", "apad=pad_dur=0.18", "-ar", "44100", "-ac", "2", str(wav)])
-        dur = probe_duration(wav)
-        all_words += [Word(w.text, w.start + t0, w.end + t0) for w in words]
+    durations: list[float] = []
+    voice_used = ""
+
+    # 1) Voce: prima Gemini (più umana), poi Edge scena per scena, poi pico offline.
+    gvoice = GEMINI_VOICES[seed % len(GEMINI_VOICES)]
+    model = gemini_tts(" ".join(s["text"] for s in scenes), gvoice, voice_wav) \
+        if os.environ.get("AUTOPILOT_TTS", "gemini") == "gemini" else None
+    if model:
+        total = probe_duration(voice_wav)
+        aligned = align([s["text"] for s in scenes], transcribe_words(voice_wav), total)
+        starts = [0.0] + [next(w[1] for w in aligned if w[3] == i) for i in range(1, len(scenes))]
+        ends = starts[1:] + [total]
+        durations = [max(e - s, 0.6) for s, e in zip(starts, ends)]
+        durations[-1] = max(total - sum(durations[:-1]), 0.6)
+        all_words = [Word(t, s, e) for t, s, e, _ in aligned]
+        voice_used = f"gemini:{model}:{gvoice}"
+    else:
+        audios, t0, engines = [], 0.0, set()
+        for i, scene in enumerate(scenes):
+            audio = work / f"s{i:02}.mp3"
+            words, engine = synthesize(scene["text"], voice, audio)
+            engines.add(engine)
+            wav = work / f"s{i:02}.wav"
+            run(["ffmpeg", "-y", "-i", str(audio), "-af", "apad=pad_dur=0.18", "-ar", "44100", "-ac", "2", str(wav)])
+            dur = probe_duration(wav)
+            all_words += [Word(w.text, w.start + t0, w.end + t0) for w in words]
+            durations.append(dur)
+            audios.append(wav)
+            t0 += dur
+        concat_a = work / "concat_a.txt"
+        concat_a.write_text("".join(f"file '{p}'\n" for p in audios))
+        run(["ffmpeg", "-y", "-f", "concat", "-safe", "0", "-i", str(concat_a), str(voice_wav)])
+        voice_used = voice if "edge" in engines else "pico2wave"
+
+    # 2) Immagini: una scena per frase, lunga quanto la sua parte di voce.
+    segments, used, backgrounds = [], set(), 0
+    for i, (scene, dur) in enumerate(zip(scenes, durations)):
         png = work / f"h{i:02}.png"
         headline_png(scene.get("headline") or "", accent, png, hook=(i == 0))
         bg = background_video(scene.get("keyword", ""), dur, used, cache)
@@ -307,21 +343,16 @@ def render_plan(plan: dict, out_file: Path, work: Path | None = None, seed: int 
         seg = work / f"v{i:02}.mp4"
         scene_clip(bg, palette, png, dur, seg, seed + i)
         segments.append(seg)
-        audios.append(wav)
-        t0 += dur
 
     concat_v = work / "concat_v.txt"
     concat_v.write_text("".join(f"file '{p}'\n" for p in segments))
-    concat_a = work / "concat_a.txt"
-    concat_a.write_text("".join(f"file '{p}'\n" for p in audios))
     run(["ffmpeg", "-y", "-f", "concat", "-safe", "0", "-i", str(concat_v), "-c", "copy", str(work / "video.mp4")])
-    run(["ffmpeg", "-y", "-f", "concat", "-safe", "0", "-i", str(concat_a), str(work / "voice.wav")])
 
     ass = work / "captions.ass"
     write_ass(all_words, accent, ass)
     songs = sorted(SONGS.glob("*.mp3"))
     song = songs[seed % len(songs)]
-    total = t0
+    total = sum(durations)
     fonts_dir = str(FONT.parent)
     vf = (f"[0:v]drawbox=x=0:y=0:w='iw*t/{total:.3f}':h=14:c={accent}@0.95:t=fill,"
           f"subtitles='{ass}':fontsdir='{fonts_dir}'[v]")
@@ -334,7 +365,7 @@ def render_plan(plan: dict, out_file: Path, work: Path | None = None, seed: int 
          "-map", "[v]", "-map", "[a]", "-t", f"{total:.3f}", "-c:v", "libx264", "-preset", "medium",
          "-crf", "23", "-maxrate", "5M", "-bufsize", "10M", "-pix_fmt", "yuv420p", "-c:a", "aac", "-b:a", "160k", "-ar", "44100",
          "-movflags", "+faststart", str(out_file)])
-    return {"duration": round(total, 2), "voice": voice if "edge" in engines else "pico2wave",
+    return {"duration": round(total, 2), "voice": voice_used,
             "palette": palette, "stock_backgrounds": backgrounds, "scenes": len(segments)}
 
 

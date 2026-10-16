@@ -1,6 +1,8 @@
-"""Sceglie le curiosità storiche del giorno e scrive i piani delle clip con un LLM gratuito.
+"""Sceglie gli oggetti del giorno e scrive clip "Come è fatto" con un LLM gratuito.
 
-Fonte dei fatti (gratis, senza chiavi): gli eventi "accadde oggi" di Wikipedia.
+Formato ispirato ai documentari sulle fabbriche: come nasce un oggetto di tutti i
+giorni, passo per passo. I fatti vengono da Wikipedia (gratis, senza chiavi): la
+sezione sulla produzione della voce inglese più il riassunto della voce italiana.
 LLM: Google Gemini con GEMINI_API_KEY (piano gratuito); in alternativa qualsiasi
 endpoint compatibile OpenAI tramite LLM_BASE_URL / LLM_API_KEY / LLM_MODEL.
 """
@@ -8,6 +10,7 @@ from __future__ import annotations
 
 import json
 import os
+import random
 import re
 import time
 from datetime import date as Date
@@ -19,31 +22,107 @@ from autopilot.render import PALETTES
 
 HEADERS = {"User-Agent": "MoneyPrinterTurbo-autopilot/1.0 (https://github.com/marconis759/MoneyPrinterTurbo)"}
 
+# (nome italiano, voce Wikipedia inglese, voce Wikipedia italiana)
+OBJECTS = [
+    ("la matita", "Pencil", "Matita"), ("la carta", "Paper", "Carta"), ("il vetro", "Glass", "Vetro"),
+    ("le bottiglie di vetro", "Glass bottle", "Bottiglia"), ("il cioccolato", "Chocolate", "Cioccolato"),
+    ("la pasta secca", "Pasta", "Pasta (alimento)"), ("il sapone", "Soap", "Sapone"),
+    ("il dentifricio", "Toothpaste", "Dentifricio"), ("i jeans", "Jeans", "Jeans"),
+    ("le monete", "Coin", "Moneta"), ("la mozzarella", "Mozzarella", "Mozzarella"),
+    ("il parmigiano", "Parmigiano Reggiano", "Parmigiano Reggiano"), ("gli pneumatici", "Tire", "Pneumatico"),
+    ("le lampadine", "Incandescent light bulb", "Lampada a incandescenza"), ("i pastelli a cera", "Crayon", "Pastello"),
+    ("le gomme da masticare", "Chewing gum", "Gomma da masticare"), ("le patatine", "Potato chip", "Patatine fritte in busta"),
+    ("i mattoni", "Brick", "Mattone"), ("il cemento", "Cement", "Cemento"), ("l'acciaio", "Steel", "Acciaio"),
+    ("le lattine", "Aluminum can", "Lattina"), ("la carta igienica", "Toilet paper", "Carta igienica"),
+    ("le candele", "Candle", "Candela"), ("i fiammiferi", "Match", "Fiammifero"), ("le penne a sfera", "Ballpoint pen", "Penna a sfera"),
+    ("le palline da tennis", "Tennis ball", "Pallina da tennis"), ("i palloni da calcio", "Ball (association football)", "Pallone da calcio"),
+    ("le chitarre", "Guitar", "Chitarra"), ("i pianoforti", "Piano", "Pianoforte"), ("gli specchi", "Mirror", "Specchio"),
+    ("le forbici", "Scissors", "Forbici"), ("i coltelli da cucina", "Kitchen knife", "Coltello da cucina"),
+    ("le posate", "Cutlery", "Posate"), ("la ceramica", "Porcelain", "Porcellana"), ("i bottoni", "Button", "Bottone"),
+    ("le cerniere lampo", "Zipper", "Chiusura lampo"), ("le scarpe da ginnastica", "Sneakers", "Scarpe da ginnastica"),
+    ("i fuochi d'artificio", "Fireworks", "Fuochi d'artificio"), ("il pane", "Bread", "Pane"), ("il caffè", "Coffee", "Caffè"),
+    ("lo zucchero", "Sugar", "Zucchero"), ("il sale", "Salt", "Sale da cucina"), ("l'olio d'oliva", "Olive oil", "Olio di oliva"),
+    ("il gelato", "Ice cream", "Gelato"), ("i marshmallow", "Marshmallow", "Marshmallow"), ("le caramelle gommose", "Gummy candy", "Caramella gommosa"),
+    ("i cereali da colazione", "Breakfast cereal", "Cereali per la colazione"), ("il burro", "Butter", "Burro"),
+    ("lo yogurt", "Yogurt", "Yogurt"), ("i cornflakes", "Corn flakes", "Corn flakes"), ("il ketchup", "Ketchup", "Ketchup"),
+    ("la birra", "Beer", "Birra"), ("il vino", "Wine", "Vino"), ("l'aceto balsamico", "Balsamic vinegar", "Aceto balsamico di Modena"),
+    ("i biscotti", "Biscuit", "Biscotto"), ("le bustine di tè", "Tea bag", "Bustina di tè"), ("la plastica", "Plastic", "Materie plastiche"),
+    ("le bottiglie di plastica", "Plastic bottle", "Bottiglia di plastica"), ("il nylon", "Nylon", "Nylon"),
+    ("i mattoncini da costruzione", "Lego", "Lego"), ("le biglie di vetro", "Marble (toy)", "Biglia"),
+    ("i dadi da gioco", "Dice", "Dado (gioco)"), ("le carte da gioco", "Playing card", "Carte da gioco"),
+    ("gli occhiali", "Glasses", "Occhiali"), ("le lenti a contatto", "Contact lens", "Lente a contatto"),
+    ("gli orologi meccanici", "Mechanical watch", "Orologio meccanico"), ("le batterie", "Battery (electricity)", "Batteria (elettrotecnica)"),
+    ("i pannelli solari", "Solar panel", "Pannello fotovoltaico"), ("i chip dei computer", "Integrated circuit", "Circuito integrato"),
+    ("la fibra ottica", "Optical fiber", "Fibra ottica"), ("i cavi elettrici", "Electrical cable", "Cavo elettrico"),
+    ("le viti", "Screw", "Vite (meccanica)"), ("i chiodi", "Nail (fastener)", "Chiodo"), ("le graffette", "Paper clip", "Fermaglio"),
+    ("le puntine", "Thumbtack", "Puntina da disegno"), ("le spille da balia", "Safety pin", "Spilla da balia"),
+    ("gli ombrelli", "Umbrella", "Ombrello"), ("le valigie", "Suitcase", "Valigia"), ("i cuscini", "Pillow", "Cuscino"),
+    ("i materassi", "Mattress", "Materasso"), ("gli asciugamani", "Towel", "Asciugamano"), ("le spugne", "Sponge (tool)", "Spugna"),
+    ("i pennelli", "Paintbrush", "Pennello"), ("la vernice", "Paint", "Vernice"), ("i gessetti", "Chalk", "Gesso"),
+    ("le gomme per cancellare", "Eraser", "Gomma per cancellare"), ("il nastro adesivo", "Adhesive tape", "Nastro adesivo"),
+    ("la colla", "Adhesive", "Adesivo"), ("le banconote", "Banknote", "Banconota"), ("i francobolli", "Postage stamp", "Francobollo"),
+    ("le biciclette", "Bicycle", "Bicicletta"), ("i caschi", "Bicycle helmet", "Casco per bicicletta"), ("gli skateboard", "Skateboard", "Skateboard"),
+    ("le tavole da surf", "Surfboard", "Tavola da surf"), ("gli sci", "Ski", "Sci (attrezzo)"), ("le racchette da tennis", "Racket (sports equipment)", "Racchetta"),
+    ("le mazze da baseball", "Baseball bat", "Mazza da baseball"), ("le campane", "Bell", "Campana"), ("i violini", "Violin", "Violino"),
+    ("i dischi in vinile", "Phonograph record", "Disco in vinile"), ("i profumi", "Perfume", "Profumo"), ("i rossetti", "Lipstick", "Rossetto"),
+    ("lo shampoo", "Shampoo", "Shampoo"), ("i cotton fioc", "Cotton swab", "Bastoncino cotonato"), ("gli spazzolini", "Toothbrush", "Spazzolino da denti"),
+    ("i cerotti", "Adhesive bandage", "Cerotto"), ("i guanti in lattice", "Medical glove", "Guanto"), ("le mascherine", "Surgical mask", "Mascherina chirurgica"),
+    ("i palloncini", "Balloon", "Palloncino"), ("le bolle di sapone", "Soap bubble", "Bolla di sapone"), ("il cartone", "Corrugated fiberboard", "Cartone ondulato"),
+    ("le scatolette di tonno", "Canned tuna", "Tonno in scatola"), ("i barattoli di latta", "Tin can", "Scatola di latta"),
+]
 
-def fetch_history(day: str) -> list[dict]:
-    """Eventi di questo giorno nella storia, con un estratto della voce Wikipedia come base dei fatti."""
-    d = Date.fromisoformat(day)
-    for lang in ("it", "en"):
-        url = f"https://api.wikimedia.org/feed/v1/wikipedia/{lang}/onthisday/all/{d.month:02}/{d.day:02}"
-        try:
-            r = requests.get(url, headers=HEADERS, timeout=30)
-            r.raise_for_status()
-            data = r.json()
-        except Exception as exc:
-            print(f"Wikipedia ({lang}) non disponibile: {exc}")
+
+def _wiki_text(lang: str, title: str) -> str:
+    r = requests.get(f"https://{lang}.wikipedia.org/w/api.php", headers=HEADERS, timeout=30, params={
+        "action": "query", "prop": "extracts", "explaintext": 1, "exsectionformat": "wiki",
+        "redirects": 1, "titles": title, "format": "json", "formatversion": 2})
+    r.raise_for_status()
+    pages = r.json().get("query", {}).get("pages", [])
+    return (pages[0].get("extract") or "") if pages else ""
+
+
+def _production_part(text: str, limit: int) -> str:
+    """Le sezioni che parlano di produzione; altrimenti l'inizio della voce."""
+    parts = re.split(r"\n(?===+ )", text)
+    keep, level = [], 0
+    for part in parts:
+        head = re.match(r"(=+) (.*?) =+", part)
+        if not head:
             continue
-        events = []
-        for kind in ("selected", "events", "births"):
-            for ev in data.get(kind, []):
-                pages = ev.get("pages") or []
-                events.append({
-                    "lingua": lang, "tipo": kind, "anno": ev.get("year"), "evento": ev.get("text", ""),
-                    "voci": [{"titolo": p.get("normalizedtitle") or p.get("title"),
-                              "estratto": (p.get("extract") or "")[:700]} for p in pages[:2]],
-                })
-        if events:
-            return events
-    return []
+        depth = len(head.group(1))
+        if level and depth > level:
+            keep.append(part)  # sottosezione della parte sulla produzione
+            continue
+        level = 0
+        if re.search(r"manufactur|production|process|making|fabbricazione|produzione|lavorazione|realizzazione",
+                     head.group(2), re.I):
+            keep.append(part)
+            level = depth
+    chosen = "\n".join(keep) if keep else text
+    return re.sub(r"\n{2,}", "\n", chosen).strip()[:limit]
+
+
+def fetch_object_facts(obj: tuple[str, str, str]) -> dict:
+    name, en, it = obj
+    facts = {"oggetto": name, "fonti": []}
+    for lang, title, key, limit in (("en", en, "produzione_en", 3500), ("it", it, "voce_it", 1500)):
+        try:
+            text = _wiki_text(lang, title)
+        except Exception as exc:
+            print(f"  Wikipedia {lang} '{title}' non disponibile: {exc}")
+            continue
+        if text:
+            facts[key] = _production_part(text, limit) if lang == "en" else text[:limit]
+            facts["fonti"].append(f"https://{lang}.wikipedia.org/wiki/{title.replace(' ', '_')}")
+    return facts
+
+
+def choose_objects(n: int, avoid: list[str], day: str) -> list[tuple[str, str, str]]:
+    done = " | ".join(avoid).lower()
+    fresh = [o for o in OBJECTS if o[0].lower() not in done]
+    pool = fresh if len(fresh) >= n else OBJECTS
+    rnd = random.Random(day)
+    return rnd.sample(pool, min(n, len(pool)))
 
 
 # ---------------------------------------------------------------------- LLM
@@ -106,46 +185,32 @@ def chat_json(system: str, user: str, max_tokens: int = 3000) -> dict:
 
 
 RULES = """Regole editoriali (obbligatorie):
-- Tema UNICO: curiosità sulla storia (eventi, invenzioni, personaggi, usanze, record, aneddoti).
-- Lingua: italiano naturale e parlato, frasi brevi, tono da creator appassionato (non da libro di scuola).
-- Usa SOLO fatti presenti negli eventi ed estratti forniti, oppure fatti storici notissimi e certi.
-  Mai inventare date, numeri, nomi o citazioni. Se un dettaglio è incerto, non dirlo.
-- Tratta guerre, stragi e tragedie con rispetto: niente toni da spettacolo, meglio evitarle se non c'è
-  un aneddoto adatto. Niente politica di parte, odio, contenuti sessuali o macabri.
-- Ogni clip: 6-7 scene, 28-40 secondi totali (circa 80-110 parole in tutto).
-- Scena 1 = gancio fortissimo (domanda, numero, contrasto o "non sapevi che…"), max 12 parole.
-- Ultima scena = domanda o call to action che invita a commentare, taggare o salvare.
+- Formato UNICO "Come è fatto": spiega come si fabbrica un oggetto di tutti i giorni, passo per passo,
+  dalla materia prima al prodotto finito, come un documentario sulle fabbriche.
+- Non citare mai il nome di programmi TV o marchi di terzi nei titoli e nei testi.
+- Lingua: italiano naturale e parlato, frasi brevi e concrete, tono curioso da narratore di documentario.
+- Usa SOLO fatti presenti negli estratti di Wikipedia forniti o conoscenze tecniche certe e generali.
+  Mai inventare numeri, temperature, tempi o nomi di aziende. Se un dettaglio è incerto, non dirlo.
+- Ogni clip: 7-8 scene, 30-45 secondi totali (circa 90-120 parole in tutto).
+- Scena 1 = gancio fortissimo (es. "Ti sei mai chiesto come nasce…?" o un dato sorprendente), max 12 parole.
+- Scene centrali = i passaggi di produzione in ordine, uno per scena, con headline tipo "1. Fusione".
+- Ultima scena = domanda o call to action: quale oggetto vuoi vedere nel prossimo video?
+- keyword delle scene: 2-4 parole IN INGLESE che descrivano l'inquadratura di fabbrica da cercare
+  (es. "molten glass furnace", "conveyor belt bottles", "wood cutting machine"), mai nomi propri.
 """
 
 
-def pick_topics(events: list[dict], n: int, avoid: list[str], day: str) -> list[dict]:
-    system = ("Sei un autore italiano di short video di divulgazione storica per TikTok, Reels e Shorts. "
-              "Scegli le storie con il massimo potenziale virale: sorprendenti, curiose, facili da raccontare.\n"
-              + RULES)
+def write_plan(facts: dict) -> dict:
+    system = "Sei l'autore di brevi video divulgativi 'Come è fatto' per TikTok, Reels e Shorts.\n" + RULES
     user = json.dumps({
-        "compito": (f"Scegli {n} curiosità storiche per {n} clip diverse da pubblicare il {day}. "
-                    "Preferisci gli eventi di questo giorno (angolo 'accadde oggi'); se non bastano, aggiungi "
-                    "curiosità storiche notissime e certe. Varia epoche e luoghi, includi storia italiana."),
-        "evita_argomenti_gia_fatti": avoid[-120:],
-        "eventi_di_oggi_da_wikipedia": events[:60],
-        "formato_risposta": {"topics": [{"id": "slug-breve", "angolo": "taglio della clip in una frase",
-                                         "anno": "anno se noto", "fatti": ["solo fatti certi, presi dagli estratti"]}]},
-    }, ensure_ascii=False)
-    return chat_json(system, user, 3000)["topics"][:n]
-
-
-def write_plan(topic: dict) -> dict:
-    system = "Sei un autore di short video virali di curiosità storiche in italiano.\n" + RULES
-    user = json.dumps({
-        "argomento": topic,
+        "oggetto": facts["oggetto"], "estratti_wikipedia": facts,
         "formato_risposta": {
-            "id": "slug-breve", "title": "titolo YouTube Shorts max 90 caratteri",
+            "id": "slug-breve", "title": "titolo max 90 caratteri, es. 'Come è fatta la matita, passo per passo'",
             "caption": "didascalia social max 150 caratteri con 1-2 emoji",
-            "hashtags": ["5-7 hashtag, mix di generici (#storia #lososapevi #perte) e specifici"],
+            "hashtags": ["5-7 hashtag, es. #comeèfatto #fabbrica #lososapevi #curiosità #perte + specifici"],
             "palette": "una tra: " + ", ".join(PALETTES),
-            "scenes": [{"text": "frase parlata (1-2 frasi)",
-                        "headline": "testo a schermo, MAX 4 parole",
-                        "keyword": "2-3 parole IN INGLESE per cercare un video stock adatto (no nomi propri)"}],
+            "scenes": [{"text": "frase parlata (1-2 frasi)", "headline": "testo a schermo, MAX 4 parole",
+                        "keyword": "inquadratura stock IN INGLESE"}],
         },
     }, ensure_ascii=False)
     return chat_json(system, user, 2500)
@@ -174,67 +239,58 @@ def _short(text: str, words: int) -> str:
     return " ".join(parts[:words]) + ("…" if len(parts) > words else "")
 
 
-MESI = ["gennaio", "febbraio", "marzo", "aprile", "maggio", "giugno", "luglio", "agosto",
-        "settembre", "ottobre", "novembre", "dicembre"]
-
-
-def fallback_plans(events: list[dict], day: str) -> list[dict]:
-    """Senza LLM: 'accadde oggi' con gli eventi di Wikipedia in italiano, letti come sono."""
-    d = Date.fromisoformat(day)
-    when = f"{d.day} {MESI[d.month - 1]}"
-    items = [e for e in events if e["lingua"] == "it" and e["tipo"] in ("selected", "events")
-             and e.get("anno") and e.get("evento")]
-    items = sorted(items, key=lambda e: e["anno"])
-    plans = []
-    for part, chunk in enumerate((items[:5], items[5:10]), 1):
-        if len(chunk) < 3:
-            continue
-        scenes = [{"text": f"Cosa è successo il {when} nella storia? Ecco {len(chunk)} date da ricordare.",
-                   "headline": f"Accadde il {when}", "keyword": "old history book"}]
-        for e in chunk:
-            year = f"{-e['anno']} a.C." if e["anno"] < 0 else str(e["anno"])
-            scenes.append({"text": f"Nel {year}: {_short(e['evento'], 24)}",
-                           "headline": year, "keyword": "vintage archive"})
-        scenes.append({"text": "Quale di queste non conoscevi? Scrivilo nei commenti e salva il video.",
-                       "headline": "Tu lo sapevi?", "keyword": "museum visitors"})
-        plans.append({
-            "id": f"accadde-oggi-{part}", "title": f"Accadde oggi, {when}: {len(chunk)} date che hanno fatto la storia",
-            "caption": f"Accadde il {when} 📜 Quale non conoscevi?",
-            "hashtags": ["#accaddeoggi", "#storia", "#lososapevi", "#curiosità", "#perte"],
-            "scenes": scenes, "sources": [f"https://it.wikipedia.org/wiki/{d.day}_{MESI[d.month - 1]}"],
-        })
-    return plans
+def fallback_plan(facts: dict) -> dict | None:
+    """Senza LLM: le prime frasi della voce italiana di Wikipedia, lette come sono."""
+    text = re.sub(r"\s+", " ", facts.get("voce_it", "")).strip()
+    sentences = [x.strip() for x in re.split(r"(?<=[.!?])\s+", text) if len(x.split()) >= 5][:5]
+    if len(sentences) < 3:
+        return None
+    name = facts["oggetto"]
+    scenes = [{"text": f"Ti sei mai chiesto da dove vengono {name}? Ecco cosa c'è da sapere.",
+               "headline": f"Come è fatto: {name.split(' ', 1)[-1]}", "keyword": "factory production line"}]
+    scenes += [{"text": _short(x, 26), "headline": f"{i}.", "keyword": "factory machine"}
+               for i, x in enumerate(sentences, 1)]
+    scenes.append({"text": "Quale oggetto vuoi vedere nel prossimo video? Scrivilo nei commenti.",
+                   "headline": "Il prossimo?", "keyword": "industrial workers"})
+    slug = re.sub(r"[^a-z0-9]+", "-", name.lower()).strip("-")
+    return {"id": f"come-e-fatto-{slug}"[:40], "title": f"Come è fatto: {name}",
+            "caption": f"Da dove vengono {name}? 🏭", "scenes": scenes,
+            "hashtags": ["#comeèfatto", "#fabbrica", "#lososapevi", "#curiosità", "#perte"],
+            "sources": facts["fonti"]}
 
 
 def generate_plans(n: int, avoid: list[str], out_dir: Path, day: str = "") -> list[Path]:
     day = day or Date.today().isoformat()
-    events = fetch_history(day)
-    print(f"eventi storici raccolti: {len(events)}")
     out_dir.mkdir(parents=True, exist_ok=True)
     paths: list[Path] = []
-
-    def save(plan: dict) -> None:
+    llm_ok = True
+    for obj in choose_objects(n + 3, avoid, day):
+        if len(paths) >= n:
+            break
+        facts = fetch_object_facts(obj)
+        if not facts.get("produzione_en") and not facts.get("voce_it"):
+            continue
+        plan = None
+        if llm_ok:
+            try:
+                plan = validate(write_plan(facts))
+                plan["sources"] = facts["fonti"]
+                time.sleep(4)  # resta sotto i limiti gratuiti dei provider
+            except RuntimeError as exc:
+                print(f"LLM non disponibile ({exc}): uso i riassunti di Wikipedia")
+                llm_ok = False
+            except Exception as exc:
+                print(f"piano scartato ({obj[0]}): {exc}")
+                continue
+        if plan is None and not llm_ok:
+            plan = fallback_plan(facts)
+            if plan:
+                plan = validate(plan)
+        if not plan:
+            continue
+        plan["oggetto"] = obj[0]
         path = out_dir / f"{len(paths) + 1:02}-{plan['id']}.json"
         path.write_text(json.dumps(plan, ensure_ascii=False, indent=2), encoding="utf-8")
         paths.append(path)
         print(f"piano: {path.name} — {plan['title']}")
-
-    try:
-        topics = pick_topics(events, n + 2, avoid, day)
-    except Exception as exc:
-        print(f"LLM non disponibile ({exc}): uso 'accadde oggi' di Wikipedia")
-        for plan in fallback_plans(events, day):
-            save(plan)
-        return paths
-    for topic in topics:
-        if len(paths) >= n:
-            break
-        try:
-            plan = validate(write_plan(topic))
-        except Exception as exc:
-            print(f"piano scartato ({topic.get('id')}): {exc}")
-            continue
-        plan["trend"] = topic
-        save(plan)
-        time.sleep(4)  # resta sotto i limiti gratuiti dei provider
     return paths
