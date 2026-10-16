@@ -19,7 +19,8 @@ Tutto funziona senza carte di credito. Ogni canale si accende aggiungendo i suoi
 | Secret | A cosa serve | Come ottenerlo |
 |---|---|---|
 | `LLM_BASE_URL` + `LLM_API_KEY` + `LLM_MODEL` | **Necessari per avere 10 clip AI al giorno.** Senza, il sistema prova GitHub Models e, se non risponde, produce solo 2 clip con i titoli del giorno di Google News (spettacolo e tecnologia) | Vai su **aistudio.google.com/apikey** → *Create API key* (piano gratuito, nessuna carta). Poi: `LLM_BASE_URL` = `https://generativelanguage.googleapis.com/v1beta/openai`, `LLM_API_KEY` = la chiave, `LLM_MODEL` = `gemini-2.5-flash` |
-| `PEXELS_API_KEY` | Sfondi video veri invece dei gradienti | Registrati su pexels.com/api → copia la chiave |
+| `PIXABAY_API_KEY` | Sfondi video veri invece dei gradienti | Registrati su pixabay.com (gratis) → apri pixabay.com/api/docs/ da loggato → la chiave è nel paragrafo *Parameters*, voce `key` |
+| `PEXELS_API_KEY` (alternativa) | Come sopra, se Pexels riapre le nuove chiavi | pexels.com/api |
 | `TELEGRAM_BOT_TOKEN` + `TELEGRAM_CHAT_ID` | Ti arriva ogni clip sul telefono, all'orario giusto, con didascalia pronta da incollare su TikTok | Su Telegram scrivi a **@BotFather** → `/newbot` → copia il token. Poi scrivi un messaggio al tuo bot e apri `https://api.telegram.org/bot<TOKEN>/getUpdates`: il numero in `"chat":{"id":…}` è il CHAT_ID |
 
 ## Pubblicazione automatica sui social (gratis)
