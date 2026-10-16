@@ -42,7 +42,7 @@ def main() -> None:
         from autopilot.writer import generate_plans
 
         avoid = [h["title"] for h in history[-120:]]
-        plan_paths = generate_plans(args.count, avoid, out / "plans")
+        plan_paths = generate_plans(args.count, avoid, out / "plans", args.date)
     if args.only:
         plan_paths = plan_paths[: args.only]
 

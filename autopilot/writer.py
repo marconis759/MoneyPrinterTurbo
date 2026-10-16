@@ -172,14 +172,55 @@ def validate(plan: dict) -> dict:
     return plan
 
 
-def generate_plans(n: int, avoid: list[str], out_dir: Path) -> list[Path]:
+def _short(text: str, words: int) -> str:
+    text = re.sub(r"\s+-\s+[^-]+$", "", text or "").strip()  # toglie " - Nome testata"
+    parts = text.split()
+    return " ".join(parts[:words]) + ("…" if len(parts) > words else "")
+
+
+def fallback_plans(trends: list[dict], date: str) -> list[dict]:
+    """Senza LLM: classifiche delle ricerche del giorno, solo con dati reali di Google Trends."""
+    top = [t for t in trends if t["source"] == "google_trends" and t.get("title")][:10]
+    plans = []
+    for part, chunk in enumerate((top[:5], top[5:10]), 1):
+        if len(chunk) < 3:
+            continue
+        first = 1 + (part - 1) * 5
+        scenes = [{"text": f"Ecco cosa stanno cercando gli italiani su Google oggi. Parti dal numero {first + len(chunk) - 1}.",
+                   "headline": "Cosa cerca l'Italia oggi", "keyword": "people using smartphone"}]
+        for i, t in reversed(list(enumerate(chunk))):
+            news = f" {_short(t['news'][0], 14)}." if t.get("news") else ""
+            scenes.append({"text": f"Numero {first + i}: {t['title']}.{news}",
+                           "headline": f"#{first + i} {_short(t['title'], 3)}",
+                           "keyword": "news city people"})
+        scenes.append({"text": "Quale di queste ti interessa di più? Scrivilo nei commenti.",
+                       "headline": "E tu cosa cerchi?", "keyword": "young people talking"})
+        plans.append({
+            "id": f"ricerche-del-giorno-{part}",
+            "title": f"Le ricerche più cercate oggi in Italia ({first}-{first + len(chunk) - 1}) — {date}",
+            "caption": "Cosa sta cercando l'Italia oggi su Google? 🔎 La classifica del giorno",
+            "hashtags": ["#googletrends", "#notizie", "#oggi", "#italia", "#trend", "#perte"],
+            "scenes": scenes, "sources": ["https://trends.google.it/trending?geo=IT"],
+        })
+    return plans
+
+
+def generate_plans(n: int, avoid: list[str], out_dir: Path, date: str = "") -> list[Path]:
     trends = fetch_trends()
     print(f"trend raccolti: {len(trends)}")
     if not trends:
         raise RuntimeError("Nessun trend raggiungibile")
-    topics = pick_topics(trends, n + 2, avoid)
     out_dir.mkdir(parents=True, exist_ok=True)
     paths: list[Path] = []
+    try:
+        topics = pick_topics(trends, n + 2, avoid)
+    except Exception as exc:
+        print(f"LLM non disponibile ({exc}): uso le classifiche di Google Trends")
+        topics = []
+        for plan in fallback_plans(trends, date):
+            path = out_dir / f"{len(paths) + 1:02}-{plan['id']}.json"
+            path.write_text(json.dumps(plan, ensure_ascii=False, indent=2), encoding="utf-8")
+            paths.append(path)
     for topic in topics:
         if len(paths) >= n:
             break
@@ -193,5 +234,5 @@ def generate_plans(n: int, avoid: list[str], out_dir: Path) -> list[Path]:
         path.write_text(json.dumps(plan, ensure_ascii=False, indent=2), encoding="utf-8")
         paths.append(path)
         print(f"piano: {path.name} — {plan['title']}")
-        time.sleep(4)  # resta sotto i limiti gratuiti di GitHub Models
+        time.sleep(4)  # resta sotto i limiti gratuiti dei provider
     return paths
