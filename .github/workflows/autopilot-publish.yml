@@ -1,0 +1,81 @@
+name: Autopilot - pubblica le clip
+
+on:
+  schedule:
+    - cron: "*/30 4-21 * * *" # ogni 30 minuti; pubblica solo quando scatta l'orario di una clip
+  workflow_dispatch:
+    inputs:
+      force_next:
+        description: "Pubblica subito la prossima clip"
+        type: boolean
+        default: false
+
+permissions:
+  contents: write
+
+concurrency:
+  group: autopilot-publish
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          sparse-checkout: autopilot
+
+      - name: Scarica il pacchetto di oggi
+        id: pkg
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          D=$(TZ=Europe/Rome date +%F)
+          TAG="clips-$D"
+          if ! gh release view "$TAG" >/dev/null 2>&1; then
+            echo "Nessun pacchetto per $D"; echo "skip=1" >> "$GITHUB_OUTPUT"; exit 0
+          fi
+          mkdir -p pkg && cd pkg
+          gh release download "$TAG" --pattern "manifest.json"
+          gh release download "$TAG" --pattern "published.json" 2>/dev/null || true
+          gh release view "$TAG" --json assets --jq '.assets[].name' > assets.txt
+          python - <<'PY' > ../next.txt
+          import json, os
+          m = json.load(open("manifest.json"))
+          done = set()
+          if os.path.exists("published.json"):
+              done = {p["file"] for p in json.load(open("published.json"))["published"]}
+          assets = set(open("assets.txt").read().split())
+          nxt = [c["file"] for c in m["clips"] if c["file"] not in done and c["file"] in assets]
+          print(nxt[0] if nxt else "")
+          PY
+          NEXT=$(cat ../next.txt)
+          [ -n "$NEXT" ] && gh release download "$TAG" --pattern "$NEXT"
+          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+          echo "base=https://github.com/${{ github.repository }}/releases/download/$TAG" >> "$GITHUB_OUTPUT"
+
+      - name: Pubblica se è l'ora
+        if: steps.pkg.outputs.skip != '1'
+        env:
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+          YT_CLIENT_ID: ${{ secrets.YT_CLIENT_ID }}
+          YT_CLIENT_SECRET: ${{ secrets.YT_CLIENT_SECRET }}
+          YT_REFRESH_TOKEN: ${{ secrets.YT_REFRESH_TOKEN }}
+          IG_USER_ID: ${{ secrets.IG_USER_ID }}
+          IG_ACCESS_TOKEN: ${{ secrets.IG_ACCESS_TOKEN }}
+          UPLOAD_POST_API_KEY: ${{ secrets.UPLOAD_POST_API_KEY }}
+          UPLOAD_POST_USER: ${{ secrets.UPLOAD_POST_USER }}
+        run: |
+          pip install -q requests
+          FORCE=""
+          [ "${{ github.event.inputs.force_next }}" = "true" ] && FORCE="--force-next"
+          python autopilot/publish.py pkg --base-url "${{ steps.pkg.outputs.base }}" $FORCE
+
+      - name: Aggiorna lo stato
+        if: steps.pkg.outputs.skip != '1'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          [ -f pkg/published.json ] && gh release upload "${{ steps.pkg.outputs.tag }}" pkg/published.json --clobber || true
