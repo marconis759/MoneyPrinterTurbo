@@ -102,7 +102,7 @@ def transcribe_words(wav: Path) -> list[tuple[str, float, float]] | None:
         segments, _ = model.transcribe(str(wav), language="it", word_timestamps=True)
         return [(w.word.strip(), w.start, w.end) for seg in segments for w in (seg.words or [])]
     except Exception as exc:  # modello non scaricabile o audio illeggibile
-        print(f"  faster-whisper non disponibile ({exc.__class__.__name__}): tempi stimati")
+        print(f"  faster-whisper non disponibile ({exc.__class__.__name__}: {exc}): tempi stimati")
         return None
 
 
