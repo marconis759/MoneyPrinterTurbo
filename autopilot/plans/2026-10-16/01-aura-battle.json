@@ -1,0 +1,55 @@
+{
+  "id": "aura-battle",
+  "palette": "violet",
+  "title": "Aura battle: la sfida TikTok che porta 200 ragazzi in piazza",
+  "caption": "200 ragazzi in piazza per sfidarsi a colpi di… aura 👀 Gioco innocuo o moda da fermare?",
+  "hashtags": [
+    "#aurabattle",
+    "#aura",
+    "#aurafarming",
+    "#tiktokitalia",
+    "#veneto",
+    "#perte"
+  ],
+  "scenes": [
+    {
+      "text": "Duecento ragazzi in piazza. Per sfidarsi a colpi di aura.",
+      "headline": "200 ragazzi in piazza",
+      "keyword": "teenagers crowd city square"
+    },
+    {
+      "text": "Si chiama aura battle, ed è la sfida di TikTok di cui parlano tutti.",
+      "headline": "Aura battle",
+      "keyword": "teen filming phone"
+    },
+    {
+      "text": "Due ragazzi faccia a faccia. Niente parole: solo sguardi, gesti e postura.",
+      "headline": "Solo sguardi e gesti",
+      "keyword": "two people staring"
+    },
+    {
+      "text": "Vince chi ha più aura, cioè più carisma. E a decidere è il pubblico.",
+      "headline": "Decide il pubblico",
+      "keyword": "crowd cheering"
+    },
+    {
+      "text": "Il 3 ottobre a Vicenza un raduno è finito nel caos.",
+      "headline": "Vicenza: caos",
+      "keyword": "police lights night"
+    },
+    {
+      "text": "E a Castelfranco Veneto carabinieri e polizia locale hanno fermato circa 200 studenti.",
+      "headline": "Castelfranco Veneto",
+      "keyword": "police car lights"
+    },
+    {
+      "text": "Tu che dici: gioco innocuo o moda da fermare? Scrivilo nei commenti.",
+      "headline": "E tu?",
+      "keyword": "teen thinking"
+    }
+  ],
+  "sources": [
+    "https://www.open.online/2026/10/15/castelfranco-aura-battle-studenti-polizia-cosa-e-video/",
+    "https://www.today.it/cronaca/caos-vicenza-raduno-battle-aura-disordini-atti-vandalici.html"
+  ]
+}

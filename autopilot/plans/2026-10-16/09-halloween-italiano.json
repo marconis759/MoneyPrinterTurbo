@@ -1,0 +1,47 @@
+{
+  "id": "halloween-italiano",
+  "palette": "orange",
+  "title": "Halloween non è americano: in Italia lo festeggiavamo già",
+  "caption": "Pensavi che Halloween fosse solo americano? In Sardegna e Sicilia esiste da secoli 🇮🇹",
+  "hashtags": [
+    "#halloween",
+    "#tradizioni",
+    "#sardegna",
+    "#sicilia",
+    "#lososapevi",
+    "#perte"
+  ],
+  "scenes": [
+    {
+      "text": "Halloween è una moda americana? Non proprio. In Italia c'era già.",
+      "headline": "Halloween è italiano?",
+      "keyword": "candles night"
+    },
+    {
+      "text": "In Sardegna, la notte tra il 1 e il 2 novembre, i bambini bussano alle porte per Su mortu mortu.",
+      "headline": "Sardegna: Su mortu mortu",
+      "keyword": "old village street night"
+    },
+    {
+      "text": "Chiedono un dono per le anime dei defunti, proprio come il dolcetto o scherzetto.",
+      "headline": "Dolcetto o scherzetto",
+      "keyword": "children trick or treat"
+    },
+    {
+      "text": "In Sicilia, il 2 novembre, i morti portano i regali ai bambini.",
+      "headline": "Sicilia: i regali dei morti",
+      "keyword": "gift box child"
+    },
+    {
+      "text": "E sulle tavole arrivano frutta martorana e pupi di zucchero.",
+      "headline": "Frutta martorana",
+      "keyword": "colorful marzipan fruit"
+    },
+    {
+      "text": "Nella tua regione c'è una tradizione così? Raccontala nei commenti.",
+      "headline": "E da te?",
+      "keyword": "italian old town"
+    }
+  ],
+  "sources": []
+}

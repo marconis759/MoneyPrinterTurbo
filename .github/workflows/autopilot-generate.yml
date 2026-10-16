@@ -1,0 +1,80 @@
+name: Autopilot - genera le clip del giorno
+
+on:
+  schedule:
+    - cron: "15 3 * * *" # 05:15 in Italia (ora legale), 04:15 con l'ora solare
+  workflow_dispatch:
+    inputs:
+      date:
+        description: "Data AAAA-MM-GG (vuoto = oggi, ora italiana)"
+        required: false
+      count:
+        description: "Numero di clip"
+        required: false
+        default: "10"
+
+permissions:
+  contents: write # release del giorno + history.json
+  models: read # GitHub Models gratuito per scrivere i testi
+
+concurrency:
+  group: autopilot-generate
+  cancel-in-progress: false
+
+jobs:
+  generate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Dipendenze
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq ffmpeg libttspico-utils fonts-dejavu-core
+          pip install -q edge-tts==7.3.1 requests pillow
+
+      - name: Data
+        id: d
+        run: |
+          D="${{ github.event.inputs.date }}"
+          [ -z "$D" ] && D=$(TZ=Europe/Rome date +%F)
+          echo "date=$D" >> "$GITHUB_OUTPUT"
+
+      - name: Genera piani e video
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PEXELS_API_KEY: ${{ secrets.PEXELS_API_KEY }}
+          LLM_BASE_URL: ${{ secrets.LLM_BASE_URL }}
+          LLM_API_KEY: ${{ secrets.LLM_API_KEY }}
+          LLM_MODEL: ${{ secrets.LLM_MODEL }}
+        run: python autopilot/daily.py --date "${{ steps.d.outputs.date }}" --count "${{ github.event.inputs.count || '10' }}"
+
+      - name: Pubblica il pacchetto come release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          D="${{ steps.d.outputs.date }}"
+          TAG="clips-$D"
+          {
+            echo "Clip del $D — orari di uscita (ora italiana):"
+            echo
+            python - "$D" <<'PY'
+          import json, sys
+          m = json.load(open(f"dist/{sys.argv[1]}/manifest.json"))
+          for c in m["clips"]:
+              print(f"- **{c['slot']}** — {c['title']} ({c['duration']}s)")
+          PY
+          } > notes.md
+          gh release delete "$TAG" --yes --cleanup-tag 2>/dev/null || true
+          gh release create "$TAG" --title "Clip $D" --notes-file notes.md \
+            dist/$D/*.mp4 dist/$D/manifest.json
+
+      - name: Salva lo storico degli argomenti
+        run: |
+          git config user.name "autopilot"
+          git config user.email "autopilot@users.noreply.github.com"
+          git add autopilot/history.json
+          git commit -m "autopilot: storico clip ${{ steps.d.outputs.date }} [skip ci]" || exit 0
+          git pull --rebase -q origin "${GITHUB_REF_NAME}"
+          git push -q origin "HEAD:${GITHUB_REF_NAME}"

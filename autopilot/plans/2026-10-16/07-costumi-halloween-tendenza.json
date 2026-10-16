@@ -1,0 +1,49 @@
+{
+  "id": "costumi-halloween-tendenza",
+  "palette": "red",
+  "title": "I costumi di Halloween che hanno dominato le ricerche: quest'anno cosa scegli?",
+  "caption": "L'anno scorso su Google ha vinto un cartone animato 👀 Tu da cosa ti vesti quest'anno?",
+  "hashtags": [
+    "#halloween",
+    "#costumihalloween",
+    "#halloween2026",
+    "#kpopdemonhunters",
+    "#tiktokitalia",
+    "#perte"
+  ],
+  "scenes": [
+    {
+      "text": "Il costume di Halloween più cercato su Google l'anno scorso non era un mostro.",
+      "headline": "Niente mostri",
+      "keyword": "halloween costume party"
+    },
+    {
+      "text": "Era Rumi, la protagonista di K-Pop Demon Hunters.",
+      "headline": "Rumi vince",
+      "keyword": "kpop concert stage"
+    },
+    {
+      "text": "Sul podio anche le sue compagne Zoey e Mira.",
+      "headline": "Zoey e Mira",
+      "keyword": "girls friends costume"
+    },
+    {
+      "text": "E in classifica c'erano pure Labubu e il Chicken Jockey di Minecraft.",
+      "headline": "Labubu e Minecraft",
+      "keyword": "toys collection"
+    },
+    {
+      "text": "Insomma: meno vampiri, più cultura pop.",
+      "headline": "Più cultura pop",
+      "keyword": "neon party"
+    },
+    {
+      "text": "E tu, da cosa ti vesti quest'anno? Scrivilo qui sotto.",
+      "headline": "Il tuo costume?",
+      "keyword": "halloween makeup"
+    }
+  ],
+  "sources": [
+    "https://www.greenme.it/?p=1193093"
+  ]
+}

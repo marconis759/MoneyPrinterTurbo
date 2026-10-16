@@ -1,0 +1,47 @@
+{
+  "id": "cambio-ora-25-ottobre",
+  "palette": "blue",
+  "title": "Cambio dell'ora: domenica 25 ottobre si dorme un'ora in più",
+  "caption": "Segnatelo: domenica 25 ottobre torna l'ora solare ⏰ Un'ora di sonno in più!",
+  "hashtags": [
+    "#orasolare",
+    "#cambioora",
+    "#25ottobre",
+    "#lososapevi",
+    "#italia",
+    "#perte"
+  ],
+  "scenes": [
+    {
+      "text": "Segnati questa data: domenica 25 ottobre si dorme un'ora in più.",
+      "headline": "25 ottobre",
+      "keyword": "alarm clock bed"
+    },
+    {
+      "text": "Torna l'ora solare: alle tre di notte le lancette tornano alle due.",
+      "headline": "Dalle 3 alle 2",
+      "keyword": "clock hands"
+    },
+    {
+      "text": "Telefoni e computer si aggiorneranno da soli.",
+      "headline": "Il telefono fa da solo",
+      "keyword": "smartphone night"
+    },
+    {
+      "text": "Ma il forno, l'auto e l'orologio da polso, no. Quelli vanno cambiati a mano.",
+      "headline": "Il forno no!",
+      "keyword": "oven clock kitchen"
+    },
+    {
+      "text": "Il rovescio della medaglia? Da lunedì farà buio un'ora prima la sera.",
+      "headline": "Buio prima",
+      "keyword": "sunset city evening"
+    },
+    {
+      "text": "Tu preferisci l'ora legale o l'ora solare? Vota nei commenti.",
+      "headline": "Legale o solare?",
+      "keyword": "person thinking window"
+    }
+  ],
+  "sources": []
+}

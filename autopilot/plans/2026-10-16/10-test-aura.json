@@ -1,0 +1,52 @@
+{
+  "id": "test-aura",
+  "palette": "violet",
+  "title": "Test: quanta aura hai davvero? Rispondi a 5 domande",
+  "caption": "Fai il test e scrivi il tuo punteggio nei commenti 👇 Sii onesto!",
+  "hashtags": [
+    "#aura",
+    "#aurafarming",
+    "#test",
+    "#quiz",
+    "#tiktokitalia",
+    "#perte"
+  ],
+  "scenes": [
+    {
+      "text": "Test veloce: quanta aura hai? Conta i sì.",
+      "headline": "Quanta aura hai?",
+      "keyword": "confident man sunglasses"
+    },
+    {
+      "text": "Uno: entri in una stanza e la gente si gira a guardarti.",
+      "headline": "1. Ti guardano",
+      "keyword": "person entering room"
+    },
+    {
+      "text": "Due: nelle foto di gruppo sai sempre dove mettere le mani.",
+      "headline": "2. Le mani in foto",
+      "keyword": "group photo friends"
+    },
+    {
+      "text": "Tre: hai mai detto una frase così bene che nessuno ha risposto.",
+      "headline": "3. Frase perfetta",
+      "keyword": "friends talking cafe"
+    },
+    {
+      "text": "Quattro: cammini sotto la pioggia senza correre.",
+      "headline": "4. Pioggia? Cammini",
+      "keyword": "walking in rain"
+    },
+    {
+      "text": "Cinque: sei inciampato in pubblico e hai fatto finta di niente.",
+      "headline": "5. Inciampo? Niente",
+      "keyword": "street walking crowd"
+    },
+    {
+      "text": "Quanti sì hai fatto? Scrivi il tuo punteggio nei commenti.",
+      "headline": "Il tuo punteggio?",
+      "keyword": "young people laughing"
+    }
+  ],
+  "sources": []
+}
