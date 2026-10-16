@@ -64,8 +64,7 @@ def _llm_endpoints() -> list[tuple[str, str, str]]:
     token = os.environ.get("GITHUB_TOKEN", "")
     custom = os.environ.get("LLM_MODEL")
     endpoints = [("https://models.github.ai/inference", token, custom or "openai/gpt-4.1-mini"),
-                 ("https://models.github.ai/inference", token, "openai/gpt-4o-mini"),
-                 ("https://models.inference.ai.azure.com", token, "gpt-4o-mini")]
+                 ("https://models.github.ai/inference", token, "openai/gpt-4o-mini")]
     return [e for e in endpoints if e[1]]
 
 
@@ -82,12 +81,18 @@ def chat_json(system: str, user: str, max_tokens: int = 3000) -> dict:
         }
         for attempt in range(4):
             try:
+                headers = {"Authorization": f"Bearer {key}", "Content-Type": "application/json"}
+                if "models.github.ai" in base:
+                    headers.update({"Accept": "application/vnd.github+json",
+                                    "X-GitHub-Api-Version": "2026-03-10"})
                 r = requests.post(f"{base}/chat/completions", json=body, timeout=180, allow_redirects=False,
-                                  headers={"Authorization": f"Bearer {key}", "Content-Type": "application/json",
-                                           "Accept": "application/json"})
+                                  headers=headers)
             except requests.RequestException as exc:
                 errors.append(f"{base} {model}: {exc}")
                 time.sleep(5)
+                continue
+            if r.status_code == 400 and "response_format" in body and "response_format" in r.text:
+                body.pop("response_format")  # modello senza modalità JSON: il prompt chiede comunque JSON
                 continue
             if r.status_code == 429 or r.status_code >= 500:
                 errors.append(f"{base} {model}: HTTP {r.status_code} {r.text[:200]}")
