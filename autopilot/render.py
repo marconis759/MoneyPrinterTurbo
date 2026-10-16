@@ -189,7 +189,7 @@ def pixabay_video(query: str, min_dur: float, used: set, cache: Path) -> Path | 
                 continue
             tags = set(_words(hit.get("tags", "")))
             score = sum(1 for w in set(want) if w in tags)
-            if score == 0:
+            if score < min(2, len(set(want))):
                 continue  # Pixabay restituisce anche video popolari non pertinenti: li scarta
             files = [f for f in (hit.get("videos") or {}).values()
                      if f.get("url") and f.get("width") and f.get("height") and min(f["width"], f["height"]) >= 720]
