@@ -2,8 +2,8 @@
 
 Ogni scena del piano ha: testo parlato, titolo a schermo e una parola chiave in
 inglese per lo sfondo. La voce usa Edge TTS (gratis, nessuna chiave); se Edge
-non è raggiungibile ripiega su pico2wave offline. Lo sfondo usa Pexels quando
-c'è PEXELS_API_KEY, altrimenti un gradiente animato generato da ffmpeg.
+non è raggiungibile ripiega su pico2wave offline. Lo sfondo usa Pexels o Pixabay quando
+c'è PEXELS_API_KEY o PIXABAY_API_KEY, altrimenti un gradiente animato generato da ffmpeg.
 """
 from __future__ import annotations
 
@@ -107,7 +107,19 @@ def synthesize(text: str, voice: str, out: Path) -> tuple[list[Word], str]:
 
 
 # ------------------------------------------------------------------ sfondi
-def pexels_video(query: str, min_dur: float, used: set[int], cache: Path) -> Path | None:
+def _download(url: str, target: Path) -> Path:
+    if not target.exists():
+        with requests.get(url, stream=True, timeout=60) as dl:
+            dl.raise_for_status()
+            tmp = target.with_suffix(".part")
+            with open(tmp, "wb") as fh:
+                for part in dl.iter_content(1 << 20):
+                    fh.write(part)
+            tmp.rename(target)
+    return target
+
+
+def pexels_video(query: str, min_dur: float, used: set, cache: Path) -> Path | None:
     key = os.environ.get("PEXELS_API_KEY", "").strip()
     if not key or not query:
         return None
@@ -119,25 +131,52 @@ def pexels_video(query: str, min_dur: float, used: set[int], cache: Path) -> Pat
         )
         r.raise_for_status()
         for video in r.json().get("videos", []):
-            if video["id"] in used or video.get("duration", 0) < min(min_dur, 4):
+            vid = f"pexels-{video['id']}"
+            if vid in used or video.get("duration", 0) < min(min_dur, 4):
                 continue
             files = [f for f in video["video_files"]
                      if f.get("width") and f.get("height") and f["height"] > f["width"] and f["height"] >= 1280]
             if not files:
                 continue
             best = min(files, key=lambda f: abs(f["height"] - 1920))
-            used.add(video["id"])
-            target = cache / f"pexels-{video['id']}.mp4"
-            if not target.exists():
-                with requests.get(best["link"], stream=True, timeout=60) as dl:
-                    dl.raise_for_status()
-                    with open(target, "wb") as fh:
-                        for part in dl.iter_content(1 << 20):
-                            fh.write(part)
-            return target
+            used.add(vid)
+            return _download(best["link"], cache / f"{vid}.mp4")
     except Exception as exc:
         print(f"  Pexels non disponibile per '{query}': {exc}")
     return None
+
+
+def pixabay_video(query: str, min_dur: float, used: set, cache: Path) -> Path | None:
+    key = os.environ.get("PIXABAY_API_KEY", "").strip()
+    if not key or not query:
+        return None
+    try:
+        r = requests.get("https://pixabay.com/api/videos/", timeout=20, params={
+            "key": key, "q": query[:100], "video_type": "film", "safesearch": "true", "per_page": 30})
+        r.raise_for_status()
+        candidates = []
+        for hit in r.json().get("hits", []):
+            vid = f"pixabay-{hit['id']}"
+            if vid in used or hit.get("duration", 0) < min(min_dur, 4):
+                continue
+            files = [f for f in (hit.get("videos") or {}).values()
+                     if f.get("url") and f.get("width") and f.get("height") and min(f["width"], f["height"]) >= 720]
+            if not files:
+                continue
+            # Preferisce i video verticali; quelli orizzontali vengono ritagliati al centro.
+            best = min(files, key=lambda f: (f["height"] <= f["width"], abs(max(f["width"], f["height"]) - 1920)))
+            candidates.append((best["height"] <= best["width"], vid, best["url"]))
+        if candidates:
+            _, vid, url = sorted(candidates)[0]
+            used.add(vid)
+            return _download(url, cache / f"{vid}.mp4")
+    except Exception as exc:
+        print(f"  Pixabay non disponibile per '{query}': {exc}")
+    return None
+
+
+def background_video(query: str, min_dur: float, used: set, cache: Path) -> Path | None:
+    return pexels_video(query, min_dur, used, cache) or pixabay_video(query, min_dur, used, cache)
 
 
 def headline_png(text: str, accent: str, out: Path, hook: bool) -> None:
@@ -263,7 +302,7 @@ def render_plan(plan: dict, out_file: Path, work: Path | None = None, seed: int 
         all_words += [Word(w.text, w.start + t0, w.end + t0) for w in words]
         png = work / f"h{i:02}.png"
         headline_png(scene.get("headline") or "", accent, png, hook=(i == 0))
-        bg = pexels_video(scene.get("keyword", ""), dur, used, cache)
+        bg = background_video(scene.get("keyword", ""), dur, used, cache)
         backgrounds += bool(bg)
         seg = work / f"v{i:02}.mp4"
         scene_clip(bg, palette, png, dur, seg, seed + i)
@@ -296,7 +335,7 @@ def render_plan(plan: dict, out_file: Path, work: Path | None = None, seed: int 
          "-crf", "23", "-maxrate", "5M", "-bufsize", "10M", "-pix_fmt", "yuv420p", "-c:a", "aac", "-b:a", "160k", "-ar", "44100",
          "-movflags", "+faststart", str(out_file)])
     return {"duration": round(total, 2), "voice": voice if "edge" in engines else "pico2wave",
-            "palette": palette, "pexels_backgrounds": backgrounds, "scenes": len(segments)}
+            "palette": palette, "stock_backgrounds": backgrounds, "scenes": len(segments)}
 
 
 if __name__ == "__main__":
