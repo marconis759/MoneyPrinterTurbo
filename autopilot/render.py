@@ -245,7 +245,8 @@ def render_plan(plan: dict, out_file: Path, work: Path | None = None, seed: int 
     palette = plan.get("palette") if plan.get("palette") in PALETTES else rnd.choice(list(PALETTES))
     accent = PALETTES[palette][3]
     voice = plan.get("voice") if plan.get("voice") in VOICES else rnd.choice(VOICES)
-    work = Path(work or tempfile.mkdtemp(prefix="autopilot-"))
+    work = Path(work or tempfile.mkdtemp(prefix="autopilot-")).resolve()
+    out_file = Path(out_file).resolve()
     work.mkdir(parents=True, exist_ok=True)
     cache = work / "cache"
     cache.mkdir(exist_ok=True)

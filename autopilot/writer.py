@@ -56,35 +56,53 @@ def fetch_trends(limit_per_feed: int = 20) -> list[dict]:
 
 
 # ---------------------------------------------------------------------- LLM
-def _llm_config() -> tuple[str, str, str]:
-    base = os.environ.get("LLM_BASE_URL") or "https://models.github.ai/inference"
-    key = os.environ.get("LLM_API_KEY") or os.environ.get("GITHUB_TOKEN", "")
-    model = os.environ.get("LLM_MODEL") or "openai/gpt-4.1-mini"
-    return base.rstrip("/"), key, model
+def _llm_endpoints() -> list[tuple[str, str, str]]:
+    """(base_url, chiave, modello) da provare in ordine."""
+    if os.environ.get("LLM_BASE_URL") and os.environ.get("LLM_API_KEY"):
+        return [(os.environ["LLM_BASE_URL"].rstrip("/"), os.environ["LLM_API_KEY"],
+                 os.environ.get("LLM_MODEL") or "gpt-4o-mini")]
+    token = os.environ.get("GITHUB_TOKEN", "")
+    custom = os.environ.get("LLM_MODEL")
+    endpoints = [("https://models.github.ai/inference", token, custom or "openai/gpt-4.1-mini"),
+                 ("https://models.github.ai/inference", token, "openai/gpt-4o-mini"),
+                 ("https://models.inference.ai.azure.com", token, "gpt-4o-mini")]
+    return [e for e in endpoints if e[1]]
 
 
 def chat_json(system: str, user: str, max_tokens: int = 3000) -> dict:
-    base, key, model = _llm_config()
-    if not key:
-        raise RuntimeError("Nessuna chiave LLM: imposta GITHUB_TOKEN (Actions) o LLM_API_KEY")
-    body = {
-        "model": model, "temperature": 0.8, "max_tokens": max_tokens,
-        "response_format": {"type": "json_object"},
-        "messages": [{"role": "system", "content": system}, {"role": "user", "content": user}],
-    }
-    last = None
-    for attempt in range(5):
-        r = requests.post(f"{base}/chat/completions", json=body, timeout=120,
-                          headers={"Authorization": f"Bearer {key}", "Content-Type": "application/json"})
-        if r.status_code == 429 or r.status_code >= 500:
-            last = f"{r.status_code} {r.text[:200]}"
-            time.sleep(min(60, 10 * (attempt + 1)))
-            continue
-        r.raise_for_status()
-        text = r.json()["choices"][0]["message"]["content"]
-        text = re.sub(r"^```(?:json)?|```$", "", text.strip()).strip()
-        return json.loads(text)
-    raise RuntimeError(f"LLM non disponibile: {last}")
+    endpoints = _llm_endpoints()
+    if not endpoints:
+        raise RuntimeError("Nessuna chiave LLM: imposta GITHUB_TOKEN (Actions) o LLM_BASE_URL + LLM_API_KEY")
+    errors = []
+    for base, key, model in endpoints:
+        body = {
+            "model": model, "temperature": 0.8, "max_tokens": max_tokens,
+            "response_format": {"type": "json_object"},
+            "messages": [{"role": "system", "content": system}, {"role": "user", "content": user}],
+        }
+        for attempt in range(4):
+            try:
+                r = requests.post(f"{base}/chat/completions", json=body, timeout=180, allow_redirects=False,
+                                  headers={"Authorization": f"Bearer {key}", "Content-Type": "application/json",
+                                           "Accept": "application/json"})
+            except requests.RequestException as exc:
+                errors.append(f"{base} {model}: {exc}")
+                time.sleep(5)
+                continue
+            if r.status_code == 429 or r.status_code >= 500:
+                errors.append(f"{base} {model}: HTTP {r.status_code} {r.text[:200]}")
+                time.sleep(min(60, 15 * (attempt + 1)))
+                continue
+            try:
+                text = r.json()["choices"][0]["message"]["content"]
+                text = re.sub(r"^```(?:json)?|```$", "", text.strip()).strip()
+                return json.loads(text)
+            except (ValueError, KeyError, IndexError, TypeError):
+                errors.append(f"{base} {model}: HTTP {r.status_code} risposta non valida: {r.text[:300]!r}")
+                break  # passa al prossimo endpoint
+    for e in errors:
+        print("  LLM:", e)
+    raise RuntimeError("Nessun endpoint LLM ha risposto correttamente")
 
 
 RULES = """Regole editoriali (obbligatorie):
