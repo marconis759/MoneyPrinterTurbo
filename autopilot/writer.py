@@ -192,8 +192,9 @@ def fallback_plans(events: list[dict], day: str) -> list[dict]:
         scenes = [{"text": f"Cosa è successo il {when} nella storia? Ecco {len(chunk)} date da ricordare.",
                    "headline": f"Accadde il {when}", "keyword": "old history book"}]
         for e in chunk:
-            scenes.append({"text": f"Nel {e['anno']}: {_short(e['evento'], 24)}",
-                           "headline": str(e["anno"]), "keyword": "vintage archive"})
+            year = f"{-e['anno']} a.C." if e["anno"] < 0 else str(e["anno"])
+            scenes.append({"text": f"Nel {year}: {_short(e['evento'], 24)}",
+                           "headline": year, "keyword": "vintage archive"})
         scenes.append({"text": "Quale di queste non conoscevi? Scrivilo nei commenti e salva il video.",
                        "headline": "Tu lo sapevi?", "keyword": "museum visitors"})
         plans.append({
