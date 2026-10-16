@@ -223,8 +223,9 @@ RULES = """Regole editoriali (obbligatorie):
 - Scena 1 = gancio fortissimo (es. "Ti sei mai chiesto come nasce…?" o un dato sorprendente), max 12 parole.
 - Scene centrali = i passaggi di produzione in ordine, uno per scena, con headline tipo "1. Fusione".
 - Ultima scena = domanda o call to action: quale oggetto vuoi vedere nel prossimo video?
-- keyword delle scene: 2-4 parole IN INGLESE che descrivano l'inquadratura di fabbrica da cercare
-  (es. "molten glass furnace", "conveyor belt bottles", "wood cutting machine"), mai nomi propri.
+- keyword delle scene: 2-3 parole IN INGLESE, semplici e comuni, che si trovano davvero in una
+  libreria di video gratuiti: materiale + azione/luogo (es. "molten glass", "steel factory",
+  "conveyor belt", "wood cutting", "chocolate factory"). Mai nomi propri o termini troppo tecnici.
 """
 
 

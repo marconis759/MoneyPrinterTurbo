@@ -152,32 +152,56 @@ def pexels_video(query: str, min_dur: float, used: set, cache: Path) -> Path | N
     return None
 
 
+STOPWORDS = {"a", "an", "the", "of", "in", "on", "and", "with", "for", "to", "at", "by", "from", "close", "up", "shot"}
+GENERIC_QUERIES = ["factory production line", "industrial machine", "conveyor belt factory"]
+
+
+def _words(text: str) -> list[str]:
+    return [w.rstrip("s") for w in re.findall(r"[a-z]+", text.lower()) if w not in STOPWORDS and len(w) > 2]
+
+
 def pixabay_video(query: str, min_dur: float, used: set, cache: Path) -> Path | None:
+    """Cerca su Pixabay il video più pertinente: conta le parole della ricerca presenti nei tag."""
     key = os.environ.get("PIXABAY_API_KEY", "").strip()
     if not key or not query:
         return None
-    try:
-        r = requests.get("https://pixabay.com/api/videos/", timeout=20, params={
-            "key": key, "q": query[:100], "video_type": "film", "safesearch": "true", "per_page": 30})
-        r.raise_for_status()
+    words = _words(query)
+    attempts = [query, " ".join(words[:2]), " ".join(words[-2:])] + GENERIC_QUERIES
+    seen_queries = set()
+    for attempt in attempts:
+        if not attempt or attempt in seen_queries:
+            continue
+        seen_queries.add(attempt)
+        generic = attempt in GENERIC_QUERIES
+        want = _words(attempt) if generic else words
+        try:
+            r = requests.get("https://pixabay.com/api/videos/", timeout=20, params={
+                "key": key, "q": attempt[:100], "video_type": "film", "safesearch": "true", "per_page": 50})
+            r.raise_for_status()
+            hits = r.json().get("hits", [])
+        except Exception as exc:
+            print(f"  Pixabay non disponibile per '{attempt}': {exc}")
+            return None
         candidates = []
-        for hit in r.json().get("hits", []):
+        for hit in hits:
             vid = f"pixabay-{hit['id']}"
             if vid in used or hit.get("duration", 0) < min(min_dur, 4):
                 continue
+            tags = set(_words(hit.get("tags", "")))
+            score = sum(1 for w in set(want) if w in tags)
+            if score == 0:
+                continue  # Pixabay restituisce anche video popolari non pertinenti: li scarta
             files = [f for f in (hit.get("videos") or {}).values()
                      if f.get("url") and f.get("width") and f.get("height") and min(f["width"], f["height"]) >= 720]
             if not files:
                 continue
-            # Preferisce i video verticali; quelli orizzontali vengono ritagliati al centro.
             best = min(files, key=lambda f: (f["height"] <= f["width"], abs(max(f["width"], f["height"]) - 1920)))
-            candidates.append((best["height"] <= best["width"], vid, best["url"]))
+            # Prima la pertinenza, poi i video verticali (gli orizzontali vengono ritagliati al centro).
+            candidates.append((-score, best["height"] <= best["width"], vid, best["url"]))
         if candidates:
-            _, vid, url = sorted(candidates)[0]
+            _, _, vid, url = sorted(candidates)[0]
             used.add(vid)
             return _download(url, cache / f"{vid}.mp4")
-    except Exception as exc:
-        print(f"  Pixabay non disponibile per '{query}': {exc}")
     return None
 
 
