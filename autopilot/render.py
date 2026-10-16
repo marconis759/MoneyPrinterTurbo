@@ -182,7 +182,7 @@ def scene_clip(bg: Path | None, palette: str, png: Path, dur: float, out: Path, 
         inputs = ["-f", "lavfi", "-i",
                   f"gradients=s={W}x{H}:c0={c0}:c1={c1}:c2={c2}:c3={c0}:nb_colors=4:"
                   f"speed={rnd.uniform(0.008, 0.02):.4f}:seed={seed}:rate={FPS}:d={dur:.2f}"]
-        base = "[0:v]noise=alls=6:allf=t,setsar=1[bg]"
+        base = "[0:v]setsar=1[bg]"
     fc = (f"{base};[1:v]format=rgba,fade=in:st=0:d=0.25:alpha=1[hl];"
           f"[bg][hl]overlay=x=0:y='330+60*max(0\\,1-t/0.25)':shortest=0[v]")
     run(["ffmpeg", "-y", *inputs, "-loop", "1", "-i", str(png), "-filter_complex", fc,
@@ -293,7 +293,7 @@ def render_plan(plan: dict, out_file: Path, work: Path | None = None, seed: int 
     run(["ffmpeg", "-y", "-i", str(work / "video.mp4"), "-i", str(work / "voice.wav"),
          "-stream_loop", "-1", "-i", str(song), "-filter_complex", f"{vf};{af}",
          "-map", "[v]", "-map", "[a]", "-t", f"{total:.3f}", "-c:v", "libx264", "-preset", "medium",
-         "-crf", "21", "-pix_fmt", "yuv420p", "-c:a", "aac", "-b:a", "160k", "-ar", "44100",
+         "-crf", "23", "-maxrate", "5M", "-bufsize", "10M", "-pix_fmt", "yuv420p", "-c:a", "aac", "-b:a", "160k", "-ar", "44100",
          "-movflags", "+faststart", str(out_file)])
     return {"duration": round(total, 2), "voice": voice if "edge" in engines else "pico2wave",
             "palette": palette, "pexels_backgrounds": backgrounds, "scenes": len(segments)}

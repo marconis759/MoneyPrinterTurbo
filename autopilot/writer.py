@@ -64,8 +64,7 @@ def _llm_endpoints() -> list[tuple[str, str, str]]:
     token = os.environ.get("GITHUB_TOKEN", "")
     custom = os.environ.get("LLM_MODEL")
     endpoints = [("https://models.github.ai/inference", token, custom or "openai/gpt-4.1-mini"),
-                 ("https://models.github.ai/inference", token, "openai/gpt-4o-mini"),
-                 ("https://models.inference.ai.azure.com", token, "gpt-4o-mini")]
+                 ("https://models.github.ai/inference", token, "openai/gpt-4o-mini")]
     return [e for e in endpoints if e[1]]
 
 
@@ -82,12 +81,18 @@ def chat_json(system: str, user: str, max_tokens: int = 3000) -> dict:
         }
         for attempt in range(4):
             try:
+                headers = {"Authorization": f"Bearer {key}", "Content-Type": "application/json"}
+                if "models.github.ai" in base:
+                    headers.update({"Accept": "application/vnd.github+json",
+                                    "X-GitHub-Api-Version": "2026-03-10"})
                 r = requests.post(f"{base}/chat/completions", json=body, timeout=180, allow_redirects=False,
-                                  headers={"Authorization": f"Bearer {key}", "Content-Type": "application/json",
-                                           "Accept": "application/json"})
+                                  headers=headers)
             except requests.RequestException as exc:
                 errors.append(f"{base} {model}: {exc}")
                 time.sleep(5)
+                continue
+            if r.status_code == 400 and "response_format" in body and "response_format" in r.text:
+                body.pop("response_format")  # modello senza modalità JSON: il prompt chiede comunque JSON
                 continue
             if r.status_code == 429 or r.status_code >= 500:
                 errors.append(f"{base} {model}: HTTP {r.status_code} {r.text[:200]}")
@@ -167,14 +172,58 @@ def validate(plan: dict) -> dict:
     return plan
 
 
-def generate_plans(n: int, avoid: list[str], out_dir: Path) -> list[Path]:
+def _short(text: str, words: int) -> str:
+    text = re.sub(r"\s+-\s+[^-]+$", "", text or "").strip()  # toglie " - Nome testata"
+    parts = text.split()
+    return " ".join(parts[:words]) + ("…" if len(parts) > words else "")
+
+
+FALLBACK_SECTIONS = [
+    ("google_news_intrattenimento", "spettacolo", "Spettacolo: le 5 notizie di oggi", "#spettacolo",
+     "concert stage lights"),
+    ("google_news_tecnologia", "tecnologia", "Tech: le 5 notizie di oggi", "#tecnologia", "technology smartphone"),
+]
+
+
+def fallback_plans(trends: list[dict], date: str) -> list[dict]:
+    """Senza LLM: i titoli italiani di Google News di spettacolo e tecnologia, letti come sono."""
+    plans = []
+    for source, label, headline, tag, keyword in FALLBACK_SECTIONS:
+        items = [t for t in trends if t["source"] == source and t.get("title")][:5]
+        if len(items) < 3:
+            continue
+        scenes = [{"text": f"Le notizie di {label} di oggi in meno di un minuto. Partiamo.",
+                   "headline": headline.split(":")[0] + " oggi", "keyword": keyword}]
+        for i, t in enumerate(items, 1):
+            scenes.append({"text": f"{_short(t['title'], 22)}", "headline": f"Notizia {i}", "keyword": keyword})
+        scenes.append({"text": "Quale ti ha colpito di più? Scrivilo nei commenti e seguimi per le notizie di domani.",
+                       "headline": "E tu?", "keyword": "young people talking"})
+        plans.append({
+            "id": f"notizie-{label}",
+            "title": f"{headline} ({date})",
+            "caption": f"Le notizie di {label} di oggi in un minuto 📰",
+            "hashtags": [tag, "#notizie", "#oggi", "#italia", "#perte"],
+            "scenes": scenes, "sources": ["https://news.google.com/?hl=it&gl=IT&ceid=IT:it"],
+        })
+    return plans
+
+
+def generate_plans(n: int, avoid: list[str], out_dir: Path, date: str = "") -> list[Path]:
     trends = fetch_trends()
     print(f"trend raccolti: {len(trends)}")
     if not trends:
         raise RuntimeError("Nessun trend raggiungibile")
-    topics = pick_topics(trends, n + 2, avoid)
     out_dir.mkdir(parents=True, exist_ok=True)
     paths: list[Path] = []
+    try:
+        topics = pick_topics(trends, n + 2, avoid)
+    except Exception as exc:
+        print(f"LLM non disponibile ({exc}): uso i titoli di Google News")
+        topics = []
+        for plan in fallback_plans(trends, date):
+            path = out_dir / f"{len(paths) + 1:02}-{plan['id']}.json"
+            path.write_text(json.dumps(plan, ensure_ascii=False, indent=2), encoding="utf-8")
+            paths.append(path)
     for topic in topics:
         if len(paths) >= n:
             break
@@ -188,5 +237,5 @@ def generate_plans(n: int, avoid: list[str], out_dir: Path) -> list[Path]:
         path.write_text(json.dumps(plan, ensure_ascii=False, indent=2), encoding="utf-8")
         paths.append(path)
         print(f"piano: {path.name} — {plan['title']}")
-        time.sleep(4)  # resta sotto i limiti gratuiti di GitHub Models
+        time.sleep(4)  # resta sotto i limiti gratuiti dei provider
     return paths

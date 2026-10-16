@@ -3,7 +3,7 @@
 Ogni mattina GitHub Actions (gratis per i repository pubblici):
 
 1. **05:15** – legge i trend del giorno (Google Trends + Google News Italia),
-   fa scegliere a un'AI gratuita (GitHub Models) i 10 argomenti più adatti e
+   fa scegliere a un'AI gratuita (Gemini o GitHub Models) i 10 argomenti più adatti e
    scrive testi, titoli, didascalie e hashtag;
 2. crea le 10 clip verticali (voce Edge TTS, sottotitoli dinamici, musica);
 3. le mette in una **Release** chiamata `clips-AAAA-MM-GG` (le trovi nella
@@ -18,6 +18,7 @@ Tutto funziona senza carte di credito. Ogni canale si accende aggiungendo i suoi
 
 | Secret | A cosa serve | Come ottenerlo |
 |---|---|---|
+| `LLM_BASE_URL` + `LLM_API_KEY` + `LLM_MODEL` | **Necessari per avere 10 clip AI al giorno.** Senza, il sistema prova GitHub Models e, se non risponde, produce solo 2 clip con i titoli del giorno di Google News (spettacolo e tecnologia) | Vai su **aistudio.google.com/apikey** → *Create API key* (piano gratuito, nessuna carta). Poi: `LLM_BASE_URL` = `https://generativelanguage.googleapis.com/v1beta/openai`, `LLM_API_KEY` = la chiave, `LLM_MODEL` = `gemini-2.5-flash` |
 | `PEXELS_API_KEY` | Sfondi video veri invece dei gradienti | Registrati su pexels.com/api → copia la chiave |
 | `TELEGRAM_BOT_TOKEN` + `TELEGRAM_CHAT_ID` | Ti arriva ogni clip sul telefono, all'orario giusto, con didascalia pronta da incollare su TikTok | Su Telegram scrivi a **@BotFather** → `/newbot` → copia il token. Poi scrivi un messaggio al tuo bot e apri `https://api.telegram.org/bot<TOKEN>/getUpdates`: il numero in `"chat":{"id":…}` è il CHAT_ID |
 
