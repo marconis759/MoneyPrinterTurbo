@@ -1,8 +1,8 @@
-"""Sceglie i trend del giorno e scrive i piani delle clip con un LLM gratuito.
+"""Sceglie le curiosità storiche del giorno e scrive i piani delle clip con un LLM gratuito.
 
-Fonti dei trend (gratis, senza chiavi): Google Trends RSS e Google News RSS Italia.
-LLM: GitHub Models con il GITHUB_TOKEN del workflow (gratis). In alternativa
-qualsiasi endpoint compatibile OpenAI tramite LLM_BASE_URL / LLM_API_KEY / LLM_MODEL.
+Fonte dei fatti (gratis, senza chiavi): gli eventi "accadde oggi" di Wikipedia.
+LLM: Google Gemini con GEMINI_API_KEY (piano gratuito); in alternativa qualsiasi
+endpoint compatibile OpenAI tramite LLM_BASE_URL / LLM_API_KEY / LLM_MODEL.
 """
 from __future__ import annotations
 
@@ -10,54 +10,49 @@ import json
 import os
 import re
 import time
-import xml.etree.ElementTree as ET
+from datetime import date as Date
 from pathlib import Path
 
 import requests
 
 from autopilot.render import PALETTES
 
-HEADERS = {"User-Agent": "Mozilla/5.0 (autopilot; +https://github.com)"}
-FEEDS = [
-    ("google_trends", "https://trends.google.com/trending/rss?geo=IT"),
-    ("google_news", "https://news.google.com/rss?hl=it&gl=IT&ceid=IT:it"),
-    ("google_news_intrattenimento",
-     "https://news.google.com/rss/headlines/section/topic/ENTERTAINMENT?hl=it&gl=IT&ceid=IT:it"),
-    ("google_news_tecnologia",
-     "https://news.google.com/rss/headlines/section/topic/TECHNOLOGY?hl=it&gl=IT&ceid=IT:it"),
-    ("google_news_sport", "https://news.google.com/rss/headlines/section/topic/SPORTS?hl=it&gl=IT&ceid=IT:it"),
-]
+HEADERS = {"User-Agent": "MoneyPrinterTurbo-autopilot/1.0 (https://github.com/marconis759/MoneyPrinterTurbo)"}
 
 
-def fetch_trends(limit_per_feed: int = 20) -> list[dict]:
-    items = []
-    for name, url in FEEDS:
+def fetch_history(day: str) -> list[dict]:
+    """Eventi di questo giorno nella storia, con un estratto della voce Wikipedia come base dei fatti."""
+    d = Date.fromisoformat(day)
+    for lang in ("it", "en"):
+        url = f"https://api.wikimedia.org/feed/v1/wikipedia/{lang}/onthisday/all/{d.month:02}/{d.day:02}"
         try:
-            r = requests.get(url, headers=HEADERS, timeout=20)
+            r = requests.get(url, headers=HEADERS, timeout=30)
             r.raise_for_status()
-            root = ET.fromstring(r.content)
+            data = r.json()
         except Exception as exc:
-            print(f"feed {name} non disponibile: {exc}")
+            print(f"Wikipedia ({lang}) non disponibile: {exc}")
             continue
-        for it in root.iter("item"):
-            entry = {"source": name, "title": (it.findtext("title") or "").strip()}
-            traffic = it.find("{https://trends.google.com/trending/rss}approx_traffic")
-            if traffic is not None:
-                entry["traffic"] = traffic.text
-            news = [n.findtext("{https://trends.google.com/trending/rss}news_item_title")
-                    for n in it.findall("{https://trends.google.com/trending/rss}news_item")]
-            news = [n for n in news if n]
-            if news:
-                entry["news"] = news[:3]
-            items.append(entry)
-            if sum(1 for x in items if x["source"] == name) >= limit_per_feed:
-                break
-    return items
+        events = []
+        for kind in ("selected", "events", "births"):
+            for ev in data.get(kind, []):
+                pages = ev.get("pages") or []
+                events.append({
+                    "lingua": lang, "tipo": kind, "anno": ev.get("year"), "evento": ev.get("text", ""),
+                    "voci": [{"titolo": p.get("normalizedtitle") or p.get("title"),
+                              "estratto": (p.get("extract") or "")[:700]} for p in pages[:2]],
+                })
+        if events:
+            return events
+    return []
 
 
 # ---------------------------------------------------------------------- LLM
 def _llm_endpoints() -> list[tuple[str, str, str]]:
     """(base_url, chiave, modello) da provare in ordine."""
+    gemini = os.environ.get("GEMINI_API_KEY") or os.environ.get("GOOGLE_API_KEY")
+    if gemini and not os.environ.get("LLM_BASE_URL"):
+        return [("https://generativelanguage.googleapis.com/v1beta/openai", gemini,
+                 os.environ.get("LLM_MODEL") or "gemini-2.5-flash")]
     if os.environ.get("LLM_BASE_URL") and os.environ.get("LLM_API_KEY"):
         return [(os.environ["LLM_BASE_URL"].rstrip("/"), os.environ["LLM_API_KEY"],
                  os.environ.get("LLM_MODEL") or "gpt-4o-mini")]
@@ -71,7 +66,7 @@ def _llm_endpoints() -> list[tuple[str, str, str]]:
 def chat_json(system: str, user: str, max_tokens: int = 3000) -> dict:
     endpoints = _llm_endpoints()
     if not endpoints:
-        raise RuntimeError("Nessuna chiave LLM: imposta GITHUB_TOKEN (Actions) o LLM_BASE_URL + LLM_API_KEY")
+        raise RuntimeError("Nessuna chiave LLM: imposta GEMINI_API_KEY (o LLM_BASE_URL + LLM_API_KEY)")
     errors = []
     for base, key, model in endpoints:
         body = {
@@ -111,40 +106,42 @@ def chat_json(system: str, user: str, max_tokens: int = 3000) -> dict:
 
 
 RULES = """Regole editoriali (obbligatorie):
-- Lingua: italiano naturale e parlato, frasi brevi, tono da creator (non da telegiornale).
-- Usa SOLO fatti presenti nei titoli forniti o conoscenza generale certa. Mai inventare numeri, date, citazioni.
-  Se un dettaglio è incerto, non dirlo.
-- Vietato: tragedie o lutti di persone comuni, nomi di indagati o di minori, accuse non provate, consigli medici
-  o finanziari, contenuti politici di parte, odio, contenuti sessuali, istigazione a sfide pericolose.
+- Tema UNICO: curiosità sulla storia (eventi, invenzioni, personaggi, usanze, record, aneddoti).
+- Lingua: italiano naturale e parlato, frasi brevi, tono da creator appassionato (non da libro di scuola).
+- Usa SOLO fatti presenti negli eventi ed estratti forniti, oppure fatti storici notissimi e certi.
+  Mai inventare date, numeri, nomi o citazioni. Se un dettaglio è incerto, non dirlo.
+- Tratta guerre, stragi e tragedie con rispetto: niente toni da spettacolo, meglio evitarle se non c'è
+  un aneddoto adatto. Niente politica di parte, odio, contenuti sessuali o macabri.
 - Ogni clip: 6-7 scene, 28-40 secondi totali (circa 80-110 parole in tutto).
 - Scena 1 = gancio fortissimo (domanda, numero, contrasto o "non sapevi che…"), max 12 parole.
 - Ultima scena = domanda o call to action che invita a commentare, taggare o salvare.
 """
 
 
-def pick_topics(trends: list[dict], n: int, avoid: list[str]) -> list[dict]:
-    system = ("Sei un social media strategist italiano esperto di TikTok, Reels e Shorts. "
-              "Scegli argomenti con il massimo potenziale virale tra quelli di oggi.\n" + RULES)
+def pick_topics(events: list[dict], n: int, avoid: list[str], day: str) -> list[dict]:
+    system = ("Sei un autore italiano di short video di divulgazione storica per TikTok, Reels e Shorts. "
+              "Scegli le storie con il massimo potenziale virale: sorprendenti, curiose, facili da raccontare.\n"
+              + RULES)
     user = json.dumps({
-        "compito": (f"Scegli {n} argomenti per {n} clip diverse da pubblicare oggi. Privilegia trend in crescita, "
-                    "curiosità, intrattenimento, sport, tecnologia, lifestyle e stagionalità. Varia i temi. "
-                    "Se le notizie adatte sono poche, completa con curiosità evergreen legate al periodo."),
-            "evita_argomenti_gia_fatti": avoid[-80:],
-            "trend_di_oggi": trends,
-            "formato_risposta": {"topics": [{"id": "slug-breve", "angolo": "taglio della clip in una frase",
-                                             "fatti": ["solo fatti certi presi dai titoli"]}]},
+        "compito": (f"Scegli {n} curiosità storiche per {n} clip diverse da pubblicare il {day}. "
+                    "Preferisci gli eventi di questo giorno (angolo 'accadde oggi'); se non bastano, aggiungi "
+                    "curiosità storiche notissime e certe. Varia epoche e luoghi, includi storia italiana."),
+        "evita_argomenti_gia_fatti": avoid[-120:],
+        "eventi_di_oggi_da_wikipedia": events[:60],
+        "formato_risposta": {"topics": [{"id": "slug-breve", "angolo": "taglio della clip in una frase",
+                                         "anno": "anno se noto", "fatti": ["solo fatti certi, presi dagli estratti"]}]},
     }, ensure_ascii=False)
-    return chat_json(system, user, 2500)["topics"][:n]
+    return chat_json(system, user, 3000)["topics"][:n]
 
 
 def write_plan(topic: dict) -> dict:
-    system = "Sei un autore di short video virali in italiano.\n" + RULES
+    system = "Sei un autore di short video virali di curiosità storiche in italiano.\n" + RULES
     user = json.dumps({
         "argomento": topic,
         "formato_risposta": {
             "id": "slug-breve", "title": "titolo YouTube Shorts max 90 caratteri",
             "caption": "didascalia social max 150 caratteri con 1-2 emoji",
-            "hashtags": ["5-7 hashtag, mix di generici (#perte) e specifici"],
+            "hashtags": ["5-7 hashtag, mix di generici (#storia #lososapevi #perte) e specifici"],
             "palette": "una tra: " + ", ".join(PALETTES),
             "scenes": [{"text": "frase parlata (1-2 frasi)",
                         "headline": "testo a schermo, MAX 4 parole",
@@ -173,57 +170,62 @@ def validate(plan: dict) -> dict:
 
 
 def _short(text: str, words: int) -> str:
-    text = re.sub(r"\s+-\s+[^-]+$", "", text or "").strip()  # toglie " - Nome testata"
-    parts = text.split()
+    parts = (text or "").split()
     return " ".join(parts[:words]) + ("…" if len(parts) > words else "")
 
 
-FALLBACK_SECTIONS = [
-    ("google_news_intrattenimento", "spettacolo", "Spettacolo: le 5 notizie di oggi", "#spettacolo",
-     "concert stage lights"),
-    ("google_news_tecnologia", "tecnologia", "Tech: le 5 notizie di oggi", "#tecnologia", "technology smartphone"),
-]
+MESI = ["gennaio", "febbraio", "marzo", "aprile", "maggio", "giugno", "luglio", "agosto",
+        "settembre", "ottobre", "novembre", "dicembre"]
 
 
-def fallback_plans(trends: list[dict], date: str) -> list[dict]:
-    """Senza LLM: i titoli italiani di Google News di spettacolo e tecnologia, letti come sono."""
+def fallback_plans(events: list[dict], day: str) -> list[dict]:
+    """Senza LLM: 'accadde oggi' con gli eventi di Wikipedia in italiano, letti come sono."""
+    d = Date.fromisoformat(day)
+    when = f"{d.day} {MESI[d.month - 1]}"
+    items = [e for e in events if e["lingua"] == "it" and e["tipo"] in ("selected", "events")
+             and e.get("anno") and e.get("evento")]
+    items = sorted(items, key=lambda e: e["anno"])
     plans = []
-    for source, label, headline, tag, keyword in FALLBACK_SECTIONS:
-        items = [t for t in trends if t["source"] == source and t.get("title")][:5]
-        if len(items) < 3:
+    for part, chunk in enumerate((items[:5], items[5:10]), 1):
+        if len(chunk) < 3:
             continue
-        scenes = [{"text": f"Le notizie di {label} di oggi in meno di un minuto. Partiamo.",
-                   "headline": headline.split(":")[0] + " oggi", "keyword": keyword}]
-        for i, t in enumerate(items, 1):
-            scenes.append({"text": f"{_short(t['title'], 22)}", "headline": f"Notizia {i}", "keyword": keyword})
-        scenes.append({"text": "Quale ti ha colpito di più? Scrivilo nei commenti e seguimi per le notizie di domani.",
-                       "headline": "E tu?", "keyword": "young people talking"})
+        scenes = [{"text": f"Cosa è successo il {when} nella storia? Ecco {len(chunk)} date da ricordare.",
+                   "headline": f"Accadde il {when}", "keyword": "old history book"}]
+        for e in chunk:
+            year = f"{-e['anno']} a.C." if e["anno"] < 0 else str(e["anno"])
+            scenes.append({"text": f"Nel {year}: {_short(e['evento'], 24)}",
+                           "headline": year, "keyword": "vintage archive"})
+        scenes.append({"text": "Quale di queste non conoscevi? Scrivilo nei commenti e salva il video.",
+                       "headline": "Tu lo sapevi?", "keyword": "museum visitors"})
         plans.append({
-            "id": f"notizie-{label}",
-            "title": f"{headline} ({date})",
-            "caption": f"Le notizie di {label} di oggi in un minuto 📰",
-            "hashtags": [tag, "#notizie", "#oggi", "#italia", "#perte"],
-            "scenes": scenes, "sources": ["https://news.google.com/?hl=it&gl=IT&ceid=IT:it"],
+            "id": f"accadde-oggi-{part}", "title": f"Accadde oggi, {when}: {len(chunk)} date che hanno fatto la storia",
+            "caption": f"Accadde il {when} 📜 Quale non conoscevi?",
+            "hashtags": ["#accaddeoggi", "#storia", "#lososapevi", "#curiosità", "#perte"],
+            "scenes": scenes, "sources": [f"https://it.wikipedia.org/wiki/{d.day}_{MESI[d.month - 1]}"],
         })
     return plans
 
 
-def generate_plans(n: int, avoid: list[str], out_dir: Path, date: str = "") -> list[Path]:
-    trends = fetch_trends()
-    print(f"trend raccolti: {len(trends)}")
-    if not trends:
-        raise RuntimeError("Nessun trend raggiungibile")
+def generate_plans(n: int, avoid: list[str], out_dir: Path, day: str = "") -> list[Path]:
+    day = day or Date.today().isoformat()
+    events = fetch_history(day)
+    print(f"eventi storici raccolti: {len(events)}")
     out_dir.mkdir(parents=True, exist_ok=True)
     paths: list[Path] = []
+
+    def save(plan: dict) -> None:
+        path = out_dir / f"{len(paths) + 1:02}-{plan['id']}.json"
+        path.write_text(json.dumps(plan, ensure_ascii=False, indent=2), encoding="utf-8")
+        paths.append(path)
+        print(f"piano: {path.name} — {plan['title']}")
+
     try:
-        topics = pick_topics(trends, n + 2, avoid)
+        topics = pick_topics(events, n + 2, avoid, day)
     except Exception as exc:
-        print(f"LLM non disponibile ({exc}): uso i titoli di Google News")
-        topics = []
-        for plan in fallback_plans(trends, date):
-            path = out_dir / f"{len(paths) + 1:02}-{plan['id']}.json"
-            path.write_text(json.dumps(plan, ensure_ascii=False, indent=2), encoding="utf-8")
-            paths.append(path)
+        print(f"LLM non disponibile ({exc}): uso 'accadde oggi' di Wikipedia")
+        for plan in fallback_plans(events, day):
+            save(plan)
+        return paths
     for topic in topics:
         if len(paths) >= n:
             break
@@ -233,9 +235,6 @@ def generate_plans(n: int, avoid: list[str], out_dir: Path, date: str = "") -> l
             print(f"piano scartato ({topic.get('id')}): {exc}")
             continue
         plan["trend"] = topic
-        path = out_dir / f"{len(paths) + 1:02}-{plan['id']}.json"
-        path.write_text(json.dumps(plan, ensure_ascii=False, indent=2), encoding="utf-8")
-        paths.append(path)
-        print(f"piano: {path.name} — {plan['title']}")
+        save(plan)
         time.sleep(4)  # resta sotto i limiti gratuiti dei provider
     return paths

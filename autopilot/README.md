@@ -2,8 +2,8 @@
 
 Ogni mattina GitHub Actions (gratis per i repository pubblici):
 
-1. **05:15** – legge i trend del giorno (Google Trends + Google News Italia),
-   fa scegliere a un'AI gratuita (Gemini o GitHub Models) i 10 argomenti più adatti e
+1. **05:15** – legge gli eventi "accadde oggi" di Wikipedia e fa scegliere a
+   un'AI gratuita (Google Gemini) le 10 **curiosità storiche** più adatte, poi
    scrive testi, titoli, didascalie e hashtag;
 2. crea le 10 clip verticali (voce Edge TTS, sottotitoli dinamici, musica);
 3. le mette in una **Release** chiamata `clips-AAAA-MM-GG` (le trovi nella
@@ -18,7 +18,7 @@ Tutto funziona senza carte di credito. Ogni canale si accende aggiungendo i suoi
 
 | Secret | A cosa serve | Come ottenerlo |
 |---|---|---|
-| `LLM_BASE_URL` + `LLM_API_KEY` + `LLM_MODEL` | **Necessari per avere 10 clip AI al giorno.** Senza, il sistema prova GitHub Models e, se non risponde, produce solo 2 clip con i titoli del giorno di Google News (spettacolo e tecnologia) | Vai su **aistudio.google.com/apikey** → *Create API key* (piano gratuito, nessuna carta). Poi: `LLM_BASE_URL` = `https://generativelanguage.googleapis.com/v1beta/openai`, `LLM_API_KEY` = la chiave, `LLM_MODEL` = `gemini-2.5-flash` |
+| `GEMINI_API_KEY` | **Necessaria per 10 clip AI al giorno.** Senza, escono solo 2 clip "accadde oggi" con gli eventi di Wikipedia | aistudio.google.com/apikey → *Create API key* (piano gratuito, nessuna carta). Il nome del secret deve essere esattamente `GEMINI_API_KEY`, tra i *Repository secrets* |
 | `PIXABAY_API_KEY` | Sfondi video veri invece dei gradienti | Registrati su pixabay.com (gratis) → apri pixabay.com/api/docs/ da loggato → la chiave è nel paragrafo *Parameters*, voce `key` |
 | `PEXELS_API_KEY` (alternativa) | Come sopra, se Pexels riapre le nuove chiavi | pexels.com/api |
 | `TELEGRAM_BOT_TOKEN` + `TELEGRAM_CHAT_ID` | Ti arriva ogni clip sul telefono, all'orario giusto, con didascalia pronta da incollare su TikTok | Su Telegram scrivi a **@BotFather** → `/newbot` → copia il token. Poi scrivi un messaggio al tuo bot e apri `https://api.telegram.org/bot<TOKEN>/getUpdates`: il numero in `"chat":{"id":…}` è il CHAT_ID |
@@ -54,12 +54,12 @@ Opzioni gratuite:
 - **Rigenerare oggi**: *Actions → Autopilot - genera le clip del giorno → Run workflow*.
 - **Pubblicare subito la prossima**: *Actions → Autopilot - pubblica le clip → Run workflow* con "Pubblica subito".
 - **Scrivere tu i piani di un giorno**: crea `autopilot/plans/AAAA-MM-GG/*.json`
-  (vedi gli esempi in `plans/2026-10-16/`): quel giorno verranno usati al posto dell'AI.
+  (vedi gli esempi in `plans/esempi/`): quel giorno verranno usati al posto dell'AI.
 - **Prova in locale**: `python autopilot/render.py piano.json out.mp4`.
 
 ## Regole editoriali dell'AI
-L'AI usa solo fatti presenti nei titoli del giorno, evita tragedie di persone
-comuni, nomi di indagati o minori, consigli medici e finanziari, politica di
-parte e sfide pericolose. Le regole sono in `writer.py` (`RULES`).
+Tema unico: curiosità sulla storia. L'AI usa solo i fatti degli estratti di
+Wikipedia o fatti storici certi, tratta guerre e tragedie con rispetto ed evita
+politica di parte e contenuti macabri. Le regole sono in `writer.py` (`RULES`).
 Controlla comunque le clip nella Release del giorno: puoi cancellarne una
 prima dell'orario e verrà saltata.
