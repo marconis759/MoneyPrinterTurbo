@@ -126,12 +126,40 @@ def choose_objects(n: int, avoid: list[str], day: str) -> list[tuple[str, str, s
 
 
 # ---------------------------------------------------------------------- LLM
+_gemini_models: list[str] | None = None
+
+
+def gemini_text_models(key: str) -> list[str]:
+    """I modelli Gemini 'flash' più recenti disponibili per questa chiave (Google ritira spesso i vecchi)."""
+    global _gemini_models
+    if _gemini_models is None:
+        found = []
+        try:
+            r = requests.get("https://generativelanguage.googleapis.com/v1beta/models",
+                             params={"key": key, "pageSize": 1000}, timeout=30)
+            r.raise_for_status()
+            for m in r.json().get("models", []):
+                name = m["name"].split("/", 1)[1]
+                if ("generateContent" not in m.get("supportedGenerationMethods", []) or "flash" not in name
+                        or re.search(r"tts|image|live|audio|embed|vision|robotics|computer", name)):
+                    continue
+                version = re.search(r"gemini-(\d+(?:\.\d+)?)", name)
+                found.append((("lite" in name), -float(version.group(1)) if version else 0.0,
+                              ("preview" in name or "exp" in name), name))
+        except Exception as exc:
+            print(f"  Gemini: elenco modelli non disponibile: {exc}")
+        _gemini_models = [n for *_, n in sorted(found)][:3] or ["gemini-flash-latest"]
+        print(f"  Gemini testo: {_gemini_models}")
+    return _gemini_models
+
+
 def _llm_endpoints() -> list[tuple[str, str, str]]:
     """(base_url, chiave, modello) da provare in ordine."""
     gemini = os.environ.get("GEMINI_API_KEY") or os.environ.get("GOOGLE_API_KEY")
     if gemini and not os.environ.get("LLM_BASE_URL"):
-        return [("https://generativelanguage.googleapis.com/v1beta/openai", gemini,
-                 os.environ.get("LLM_MODEL") or "gemini-2.5-flash")]
+        base = "https://generativelanguage.googleapis.com/v1beta/openai"
+        models = [os.environ["LLM_MODEL"]] if os.environ.get("LLM_MODEL") else gemini_text_models(gemini)
+        return [(base, gemini, m) for m in models]
     if os.environ.get("LLM_BASE_URL") and os.environ.get("LLM_API_KEY"):
         return [(os.environ["LLM_BASE_URL"].rstrip("/"), os.environ["LLM_API_KEY"],
                  os.environ.get("LLM_MODEL") or "gpt-4o-mini")]
@@ -195,8 +223,9 @@ RULES = """Regole editoriali (obbligatorie):
 - Scena 1 = gancio fortissimo (es. "Ti sei mai chiesto come nasce…?" o un dato sorprendente), max 12 parole.
 - Scene centrali = i passaggi di produzione in ordine, uno per scena, con headline tipo "1. Fusione".
 - Ultima scena = domanda o call to action: quale oggetto vuoi vedere nel prossimo video?
-- keyword delle scene: 2-4 parole IN INGLESE che descrivano l'inquadratura di fabbrica da cercare
-  (es. "molten glass furnace", "conveyor belt bottles", "wood cutting machine"), mai nomi propri.
+- keyword delle scene: 2-3 parole IN INGLESE, semplici e comuni, che si trovano davvero in una
+  libreria di video gratuiti: materiale + azione/luogo (es. "molten glass", "steel factory",
+  "conveyor belt", "wood cutting", "chocolate factory"). Mai nomi propri o termini troppo tecnici.
 """
 
 

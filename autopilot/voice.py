@@ -93,16 +93,20 @@ def _norm(token: str) -> str:
 
 def transcribe_words(wav: Path) -> list[tuple[str, float, float]] | None:
     try:
+        import numpy as np
         from faster_whisper import WhisperModel
     except ImportError:
         print("  faster-whisper non installato: tempi stimati")
         return None
     try:
         model = WhisperModel(os.environ.get("AUTOPILOT_WHISPER_MODEL", "base"), device="cpu", compute_type="int8")
-        segments, _ = model.transcribe(str(wav), language="it", word_timestamps=True)
+        # L'audio viene decodificato con ffmpeg: evita l'incompatibilità tra faster-whisper e PyAV recenti.
+        pcm = subprocess.run(["ffmpeg", "-v", "error", "-i", str(wav), "-f", "f32le", "-ac", "1", "-ar", "16000", "-"],
+                             check=True, capture_output=True).stdout
+        segments, _ = model.transcribe(np.frombuffer(pcm, dtype=np.float32), language="it", word_timestamps=True)
         return [(w.word.strip(), w.start, w.end) for seg in segments for w in (seg.words or [])]
     except Exception as exc:  # modello non scaricabile o audio illeggibile
-        print(f"  faster-whisper non disponibile ({exc.__class__.__name__}): tempi stimati")
+        print(f"  faster-whisper non disponibile ({exc.__class__.__name__}: {exc}): tempi stimati")
         return None
 
 
